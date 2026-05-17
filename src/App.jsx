@@ -126,7 +126,12 @@ const App = () => {
   const chartColors = ['#1B2845','#3F7D58','#8B4548','#B07D3F','#C9A84C','#2D6A4F','#E24B4A','#2C4A6E'];
   const cats = formType === 'income' ? t.categoriesInc : t.categoriesExp;
 
-  // Отчёт
+  const allCategories = [...new Set([
+    ...t.categoriesInc,
+    ...t.categoriesExp,
+    ...transactions.map(tx => tx.category)
+  ].filter(cat => cat !== 'Другое' && cat !== 'Boshqa'))];
+
   const getReportData = () => {
     return transactions.filter(tx => {
       const txDate = new Date(tx.date);
@@ -144,8 +149,6 @@ const App = () => {
   const reportIncome = reportData.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const reportExpense = reportData.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
 
-  const allCategories = [...new Set(transactions.map(tx => tx.category))];
-
   const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, boxSizing: 'border-box', fontSize: '14px' };
   const chartTabStyle = (active) => ({ padding: '6px 14px', fontSize: '13px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: active ? c.saveBtn : c.card, color: active ? '#FFFFFF' : c.text, cursor: 'pointer', fontWeight: active ? 500 : 400 });
   const tabStyle = (active) => ({ flex: 1, padding: '12px', fontSize: '14px', border: 'none', borderRadius: '8px', backgroundColor: active ? c.tabActive : 'transparent', color: active ? c.tabText : c.sec, cursor: 'pointer', fontWeight: active ? 600 : 400 });
@@ -154,7 +157,6 @@ const App = () => {
     <div style={{ backgroundColor: c.bg, color: c.text, minHeight: '100vh', padding: '20px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
-        {/* Шапка */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>{t.appName}</h1>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -174,13 +176,11 @@ const App = () => {
           </div>
         </div>
 
-        {/* Вкладки */}
         <div style={{ display: 'flex', gap: '4px', backgroundColor: c.card, padding: '4px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '20px' }}>
           <button onClick={() => setActiveTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
           <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
         </div>
 
-        {/* ГЛАВНАЯ */}
         {activeTab === 'dashboard' && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -288,7 +288,7 @@ const App = () => {
                   <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: i < transactions.length - 1 ? '1px solid ' + c.border : 'none', gap: '12px' }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 500 }}>{tx.category}</div>
-                      <div style={{ fontSize: '12px', color: c.sec }}>{tx.description || tx.date}</div>
+                      <div style={{ fontSize: '12px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ color: tx.type === 'income' ? c.incomeColor : c.expenseColor, fontWeight: 600 }}>
@@ -306,12 +306,10 @@ const App = () => {
           </>
         )}
 
-        {/* ОТЧЁТ */}
         {activeTab === 'report' && (
           <div>
             <div style={{ backgroundColor: c.card, padding: '20px', borderRadius: '12px', marginBottom: '16px', border: '1px solid ' + c.border }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>{t.reportTitle}</h3>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: c.sec }}>{t.dateFrom}</label>
@@ -322,7 +320,6 @@ const App = () => {
                   <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} style={inputStyle} />
                 </div>
               </div>
-
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: c.sec }}>Тип операции</label>
                 <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={inputStyle}>
@@ -331,8 +328,7 @@ const App = () => {
                   <option value="expense">{t.onlyExpense}</option>
                 </select>
               </div>
-
-              <div style={{ marginBottom: '16px' }}>
+              <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: c.sec }}>{t.category}</label>
                 <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={inputStyle}>
                   <option value="">{t.allCategories}</option>
@@ -341,7 +337,6 @@ const App = () => {
               </div>
             </div>
 
-            {/* Итоги отчёта */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
               <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
                 <div style={{ fontSize: '11px', color: c.incomeColor }}>{t.totalIncome}</div>
@@ -361,7 +356,6 @@ const App = () => {
               </div>
             </div>
 
-            {/* Список операций отчёта */}
             <div style={{ backgroundColor: c.card, padding: '20px', borderRadius: '12px', border: '1px solid ' + c.border }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>{t.reportResult}</h3>
               {reportData.length === 0 ? (
