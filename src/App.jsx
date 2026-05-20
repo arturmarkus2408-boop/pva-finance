@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -26,6 +26,7 @@ const App = () => {
     amount: '', category: '', customCategory: '', description: '',
     date: new Date().toISOString().split('T')[0]
   });
+  const isLoaded = useRef(false);
 
   const tr = {
     ru: {
@@ -47,7 +48,7 @@ const App = () => {
       categoriesInc: ['Зарплата','Фриланс','Инвестиции','Перевод','Продажа','Подарок','Другое'],
       noOperations: 'Нет операций', chartTitle: 'Расходы по категориям',
       pieChart: 'Круг', barChart: 'Столбцы', lineChart: 'Линия', editMode: 'Редактирование',
-      typeLabel: 'Тип', operationType: 'Тип операции'
+      typeLabel: 'Тип', operationType: 'Тип операции', reportResult: 'Результат'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -68,7 +69,7 @@ const App = () => {
       categoriesInc: ['Maosh','Frilans','Investitsiya',"O'tkazma",'Sotuv','Sovga','Boshqa'],
       noOperations: "Amaliyotlar yo'q", chartTitle: 'Xarajatlar',
       pieChart: 'Doira', barChart: 'Ustun', lineChart: 'Chiziq', editMode: 'Tahrirlash',
-      typeLabel: 'Tur', operationType: 'Amaliyot turi'
+      typeLabel: 'Tur', operationType: 'Amaliyot turi', reportResult: 'Natija'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -89,7 +90,7 @@ const App = () => {
       categoriesInc: ['Salary','Freelance','Investment','Transfer','Sale','Gift','Other'],
       noOperations: 'No operations', chartTitle: 'Expenses by category',
       pieChart: 'Pie', barChart: 'Bar', lineChart: 'Line', editMode: 'Editing',
-      typeLabel: 'Type', operationType: 'Operation type'
+      typeLabel: 'Type', operationType: 'Operation type', reportResult: 'Result'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -110,7 +111,7 @@ const App = () => {
       categoriesInc: ['Maaş','Serbest çalışma','Yatırım','Transfer','Satış','Hediye','Diğer'],
       noOperations: 'İşlem yok', chartTitle: 'Kategoriye göre giderler',
       pieChart: 'Pasta', barChart: 'Çubuk', lineChart: 'Çizgi', editMode: 'Düzenleme',
-      typeLabel: 'Tür', operationType: 'İşlem türü'
+      typeLabel: 'Tür', operationType: 'İşlem türü', reportResult: 'Sonuç'
     }
   };
 
@@ -119,16 +120,20 @@ const App = () => {
   useEffect(() => {
     const saved = localStorage.getItem('walletData') || localStorage.getItem('pvaData');
     if (saved) {
-      const data = JSON.parse(saved);
-      setTransactions(data.transactions || []);
-      setTheme(data.theme || 'light');
-      setLanguage(data.language || 'ru');
-      setCurrency(data.currency || 'UZS');
-      if (data.currencies) setCurrencies(data.currencies);
+      try {
+        const data = JSON.parse(saved);
+        setTransactions(data.transactions || []);
+        setTheme(data.theme || 'light');
+        setLanguage(data.language || 'ru');
+        setCurrency(data.currency || 'UZS');
+        if (data.currencies) setCurrencies(data.currencies);
+      } catch (e) {}
     }
+    isLoaded.current = true;
   }, []);
 
   useEffect(() => {
+    if (!isLoaded.current) return;
     localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies }));
   }, [transactions, theme, language, currency, currencies]);
 
@@ -160,7 +165,7 @@ const App = () => {
     const isBuiltIn = builtInCats.includes(tx.category);
     setFormType(tx.type);
     setEditingId(tx.id);
-    setFormData({ amount: tx.amount.toString(), category: isBuiltIn ? tx.category : t.categoriesInc[t.categoriesInc.length-1], customCategory: isBuiltIn ? '' : tx.category, description: tx.description || '', date: tx.date });
+    setFormData({ amount: tx.amount.toString(), category: isBuiltIn ? tx.category : t.categoriesInc[t.categoriesInc.length - 1], customCategory: isBuiltIn ? '' : tx.category, description: tx.description || '', date: tx.date });
     setShowForm(true);
     setActiveTab('dashboard');
   };
@@ -186,10 +191,10 @@ const App = () => {
     categoryData[tx.category] = (categoryData[tx.category] || 0) + tx.amount;
   });
   const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
-  const chartColors = ['#1B2845','#3F7D58','#8B4548','#B07D3F','#C9A84C','#2D6A4F','#E24B4A','#2C4A6E'];
+  const chartColors = ['#1B2845', '#3F7D58', '#8B4548', '#B07D3F', '#C9A84C', '#2D6A4F', '#E24B4A', '#2C4A6E'];
   const cats = formType === 'income' ? t.categoriesInc : t.categoriesExp;
 
-  const allCategories = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)].filter(cat => cat !== 'Другое' && cat !== 'Boshqa' && cat !== 'Other' && cat !== 'Diğer'))];
+  const allCategories = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)].filter(cat => !['Другое','Boshqa','Other','Diğer'].includes(cat)))];
 
   const getReportData = () => transactions.filter(tx => {
     const txDate = new Date(tx.date);
@@ -231,14 +236,7 @@ const App = () => {
     autoTable(doc, {
       startY: 44,
       head: [[t.date, t.typeLabel, t.category, t.description, t.amount, 'Валюта']],
-      body: reportData.map(tx => [
-        tx.date,
-        tx.type === 'income' ? t.income : t.expense,
-        tx.category,
-        tx.description || '',
-        tx.amount.toLocaleString(),
-        tx.currency
-      ]),
+      body: reportData.map(tx => [tx.date, tx.type === 'income' ? t.income : t.expense, tx.category, tx.description || '', tx.amount.toLocaleString(), tx.currency]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [27, 40, 69] }
     });
@@ -253,7 +251,6 @@ const App = () => {
     <div style={{ backgroundColor: c.bg, color: c.text, minHeight: '100vh', padding: '16px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
-        {/* Шапка */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700 }}>{t.appName}</h1>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -275,7 +272,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* Добавление валюты */}
         {showCurrencyInput && (
           <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '10px', marginBottom: '14px', border: '1px solid ' + c.border, display: 'flex', gap: '8px' }}>
             <input type="text" value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)} placeholder={t.currencyPlaceholder} style={{ ...inputStyle, flex: 1 }} autoFocus maxLength={6} onKeyDown={(e) => e.key === 'Enter' && addCurrency()} />
@@ -284,13 +280,11 @@ const App = () => {
           </div>
         )}
 
-        {/* Вкладки */}
         <div style={{ display: 'flex', gap: '4px', backgroundColor: c.card, padding: '4px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
           <button onClick={() => setActiveTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
           <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
         </div>
 
-        {/* ГЛАВНАЯ */}
         {activeTab === 'dashboard' && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
@@ -416,7 +410,6 @@ const App = () => {
           </>
         )}
 
-        {/* ОТЧЁТ */}
         {activeTab === 'report' && (
           <div>
             <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', marginBottom: '14px', border: '1px solid ' + c.border }}>
@@ -472,7 +465,7 @@ const App = () => {
             </div>
 
             <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', border: '1px solid ' + c.border }}>
-              <h3 style={{ margin: '0 0 14px 0', fontSize: '15px' }}>Результат</h3>
+              <h3 style={{ margin: '0 0 14px 0', fontSize: '15px' }}>{t.reportResult}</h3>
               {reportData.length === 0 ? (
                 <div style={{ color: c.sec, textAlign: 'center', padding: '20px' }}>{t.noData}</div>
               ) : (
