@@ -26,7 +26,7 @@ const App = () => {
     amount: '', category: '', customCategory: '', description: '',
     date: new Date().toISOString().split('T')[0]
   });
-  const isLoaded = useRef(false);
+  const isFirstRender = useRef(true);
 
   const tr = {
     ru: {
@@ -129,11 +129,13 @@ const App = () => {
         if (data.currencies) setCurrencies(data.currencies);
       } catch (e) {}
     }
-    isLoaded.current = true;
   }, []);
 
   useEffect(() => {
-    if (!isLoaded.current) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies }));
   }, [transactions, theme, language, currency, currencies]);
 
