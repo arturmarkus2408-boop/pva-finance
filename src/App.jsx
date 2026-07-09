@@ -25,7 +25,14 @@ const App = () => {
     amount: '', category: '', customCategory: '', description: '',
     date: new Date().toISOString().split('T')[0]
   });
+  const [geminiKey, setGeminiKey] = useState('');
+  const [tempKey, setTempKey] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [scanNotice, setScanNotice] = useState('');
   const isFirstRender = useRef(true);
+  const fileInputRef = useRef(null);
 
   const tr = {
     ru: {
@@ -51,7 +58,14 @@ const App = () => {
       periodToday: 'Сегодня', periodWeek: 'Неделя', periodMonth: 'Месяц', periodYear: 'Год', periodAll: 'Всё',
       dataFor: 'Данные за', otherCategory: 'Прочее',
       noLineData: 'За «Сегодня» линия не строится — используйте «Неделя», «Месяц» или «Год»',
-      printHint: 'В открывшемся окне нажмите «Сохранить как PDF» в диалоге печати'
+      printHint: 'В открывшемся окне нажмите «Сохранить как PDF» в диалоге печати',
+      receiptPhoto: '📷 Фото чека', settings: 'Настройки', saveKey: 'Сохранить ключ',
+      apiKeyLabel: 'API-ключ Gemini', apiKeyPlaceholder: 'AIzaSy...',
+      apiKeyHint: 'Ключ нужен для распознавания чеков. Хранится только на вашем устройстве.',
+      getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
+      scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
+      noKeyError: 'Сначала добавьте API-ключ в ⚙️ Настройки', close: 'Закрыть',
+      recognized: 'Проверьте данные и сохраните'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -76,7 +90,14 @@ const App = () => {
       periodToday: 'Bugun', periodWeek: 'Hafta', periodMonth: 'Oy', periodYear: 'Yil', periodAll: 'Barchasi',
       dataFor: 'Davr', otherCategory: 'Boshqalar',
       noLineData: '«Bugun» uchun chiziq qurilmaydi — «Hafta», «Oy» yoki «Yil»ni tanlang',
-      printHint: "Ochilgan oynada bosma dialogida «PDF sifatida saqlash»ni tanlang"
+      printHint: "Ochilgan oynada bosma dialogida «PDF sifatida saqlash»ni tanlang",
+      receiptPhoto: '📷 Chek surati', settings: 'Sozlamalar', saveKey: 'Kalitni saqlash',
+      apiKeyLabel: 'Gemini API kaliti', apiKeyPlaceholder: 'AIzaSy...',
+      apiKeyHint: 'Chekni aniqlash uchun kalit kerak. Faqat qurilmangizda saqlanadi.',
+      getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
+      scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
+      noKeyError: 'Avval ⚙️ Sozlamalarga API kalitni qo\'shing', close: 'Yopish',
+      recognized: "Ma'lumotlarni tekshirib saqlang"
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -101,7 +122,14 @@ const App = () => {
       periodToday: 'Today', periodWeek: 'Week', periodMonth: 'Month', periodYear: 'Year', periodAll: 'All',
       dataFor: 'Data for', otherCategory: 'Other',
       noLineData: 'Line chart is not shown for «Today» — use «Week», «Month» or «Year»',
-      printHint: 'In the opened window, choose «Save as PDF» in the print dialog'
+      printHint: 'In the opened window, choose «Save as PDF» in the print dialog',
+      receiptPhoto: '📷 Receipt photo', settings: 'Settings', saveKey: 'Save key',
+      apiKeyLabel: 'Gemini API key', apiKeyPlaceholder: 'AIzaSy...',
+      apiKeyHint: 'Key is used to recognize receipts. Stored only on your device.',
+      getKey: 'How to get a key', keySaved: 'Key saved',
+      scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
+      noKeyError: 'First add an API key in ⚙️ Settings', close: 'Close',
+      recognized: 'Verify data and save'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -126,7 +154,14 @@ const App = () => {
       periodToday: 'Bugün', periodWeek: 'Hafta', periodMonth: 'Ay', periodYear: 'Yıl', periodAll: 'Tümü',
       dataFor: 'Dönem', otherCategory: 'Diğer',
       noLineData: '«Bugün» için çizgi grafik oluşturulmuyor — «Hafta», «Ay» veya «Yıl»ı seçin',
-      printHint: 'Açılan pencerede yazdırma dialoğunda «PDF olarak kaydet»i seçin'
+      printHint: 'Açılan pencerede yazdırma dialoğunda «PDF olarak kaydet»i seçin',
+      receiptPhoto: '📷 Fiş fotoğrafı', settings: 'Ayarlar', saveKey: 'Anahtarı kaydet',
+      apiKeyLabel: 'Gemini API anahtarı', apiKeyPlaceholder: 'AIzaSy...',
+      apiKeyHint: 'Anahtar, fişleri tanımak için gereklidir. Yalnızca cihazınızda saklanır.',
+      getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
+      scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
+      noKeyError: 'Önce ⚙️ Ayarlar bölümünden API anahtarı ekleyin', close: 'Kapat',
+      recognized: 'Verileri kontrol edip kaydedin'
     }
   };
 
@@ -145,6 +180,8 @@ const App = () => {
         if (data.dashboardPeriod) setDashboardPeriod(data.dashboardPeriod);
       } catch (e) {}
     }
+    const key = localStorage.getItem('walletGeminiKey');
+    if (key) { setGeminiKey(key); setTempKey(key); }
   }, []);
 
   useEffect(() => {
@@ -296,6 +333,106 @@ const App = () => {
   const reportIncome = reportData.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const reportExpense = reportData.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
 
+  // ===== СЖАТИЕ ФОТО ПЕРЕД ОТПРАВКОЙ В GEMINI =====
+  const compressImage = (file, maxSide = 1600, quality = 0.85) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (Math.max(width, height) > maxSide) {
+        const ratio = maxSide / Math.max(width, height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        if (!blob) return reject(new Error('Compression failed'));
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = URL.createObjectURL(file);
+  });
+
+  // ===== РАСПОЗНАВАНИЕ ЧЕКА ЧЕРЕЗ GEMINI VISION =====
+  const handleReceiptUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    if (!geminiKey) {
+      setScanError(t.noKeyError);
+      setShowSettings(true);
+      return;
+    }
+    setScanning(true);
+    setScanError('');
+    setScanNotice('');
+    try {
+      const base64 = await compressImage(file);
+      const prompt = 'Проанализируй фотографию чека. Найди итоговую сумму (ИТОГО, К оплате, TOTAL, TO PAY и т.п.) и дату чека. Верни СТРОГО JSON без markdown и лишнего текста в формате: {"amount": число_без_разделителей_и_валюты, "date": "YYYY-MM-DD"}. Если сумма или дата нечитаемы — используй null. Если дата на чеке в формате DD.MM.YYYY или DD/MM/YYYY — переведи в YYYY-MM-DD.';
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [
+              { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+              { text: prompt }
+            ]}],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          })
+        }
+      );
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!raw) throw new Error('Empty response');
+      let jsonText = String(raw).trim();
+      if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+      const parsed = JSON.parse(jsonText);
+      const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
+      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
+      if (!amount || isNaN(amount)) throw new Error('No amount');
+      setFormType('expense');
+      setEditingId(null);
+      setFormData({
+        amount: String(amount),
+        category: '',
+        customCategory: '',
+        description: '',
+        date
+      });
+      setShowForm(true);
+      setActiveTab('dashboard');
+      setScanNotice(t.recognized);
+      setTimeout(() => setScanNotice(''), 4000);
+    } catch (err) {
+      console.error('OCR error', err);
+      setScanError(t.scanFailed);
+      setTimeout(() => setScanError(''), 5000);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const saveGeminiKey = () => {
+    const val = tempKey.trim();
+    setGeminiKey(val);
+    if (val) localStorage.setItem('walletGeminiKey', val);
+    else localStorage.removeItem('walletGeminiKey');
+    setShowSettings(false);
+    setScanError('');
+    setScanNotice(t.keySaved);
+    setTimeout(() => setScanNotice(''), 2500);
+  };
+
   const exportExcel = () => {
     const rows = reportData.map(tx => ({
       [t.date]: tx.date,
@@ -402,8 +539,24 @@ const App = () => {
               {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
               <option value="__add__">{t.addCurrency}</option>
             </select>
+            <button onClick={() => { setTempKey(geminiKey); setShowSettings(!showSettings); }} title={t.settings} style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: showSettings ? c.saveBtn : c.card, color: showSettings ? '#fff' : c.text, cursor: 'pointer', fontSize: '13px' }}>⚙️</button>
           </div>
         </div>
+
+        {showSettings && (
+          <div style={{ backgroundColor: c.card, padding: '16px', borderRadius: '12px', marginBottom: '14px', border: '1px solid ' + c.border }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px' }}>{t.settings}</h3>
+              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '18px', padding: 0 }}>✕</button>
+            </div>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.apiKeyLabel}</label>
+            <input type="text" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder={t.apiKeyPlaceholder} style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px' }} autoComplete="off" spellCheck="false" />
+            <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>
+              {t.apiKeyHint} <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: c.saveBtn, textDecoration: 'underline' }}>{t.getKey}</a>
+            </div>
+            <button onClick={saveGeminiKey} style={{ width: '100%', padding: '10px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>{t.saveKey}</button>
+          </div>
+        )}
 
         {showCurrencyInput && (
           <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '10px', marginBottom: '14px', border: '1px solid ' + c.border, display: 'flex', gap: '8px' }}>
@@ -449,10 +602,30 @@ const App = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <button onClick={() => { setFormType('income'); setEditingId(null); setShowForm(true); }} style={{ flex: 1, padding: '13px', backgroundColor: c.incomeColor, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>{t.addIncome}</button>
               <button onClick={() => { setFormType('expense'); setEditingId(null); setShowForm(true); }} style={{ flex: 1, padding: '13px', backgroundColor: c.expenseColor, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>{t.addExpense}</button>
             </div>
+
+            <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptUpload} style={{ display: 'none' }} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={scanning}
+              style={{ width: '100%', padding: '13px', backgroundColor: c.saveBtn, color: 'white', border: 'none', borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontWeight: 500, fontSize: '14px', marginBottom: '16px', opacity: scanning ? 0.7 : 1 }}
+            >
+              {scanning ? '⏳ ' + t.scanning : t.receiptPhoto}
+            </button>
+
+            {scanError && (
+              <div style={{ backgroundColor: '#8B4548', color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>
+                {scanError}
+              </div>
+            )}
+            {scanNotice && (
+              <div style={{ backgroundColor: c.incomeColor, color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>
+                ✓ {scanNotice}
+              </div>
+            )}
 
             {showForm && (
               <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', marginBottom: '16px', border: '1px solid ' + c.border }}>
