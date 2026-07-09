@@ -33,6 +33,7 @@ const App = () => {
   const [scanNotice, setScanNotice] = useState('');
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   const tr = {
     ru: {
@@ -65,7 +66,7 @@ const App = () => {
       getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
       scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
       noKeyError: 'Сначала добавьте API-ключ в ⚙️ Настройки', close: 'Закрыть',
-      recognized: 'Проверьте данные и сохраните'
+      recognized: 'Проверьте данные и сохраните', fromGallery: 'Из галереи'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -97,7 +98,7 @@ const App = () => {
       getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
       scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
       noKeyError: 'Avval ⚙️ Sozlamalarga API kalitni qo\'shing', close: 'Yopish',
-      recognized: "Ma'lumotlarni tekshirib saqlang"
+      recognized: "Ma'lumotlarni tekshirib saqlang", fromGallery: 'Galereyadan'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -129,7 +130,7 @@ const App = () => {
       getKey: 'How to get a key', keySaved: 'Key saved',
       scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
       noKeyError: 'First add an API key in ⚙️ Settings', close: 'Close',
-      recognized: 'Verify data and save'
+      recognized: 'Verify data and save', fromGallery: 'From gallery'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -161,7 +162,7 @@ const App = () => {
       getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
       scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
       noKeyError: 'Önce ⚙️ Ayarlar bölümünden API anahtarı ekleyin', close: 'Kapat',
-      recognized: 'Verileri kontrol edip kaydedin'
+      recognized: 'Verileri kontrol edip kaydedin', fromGallery: 'Galeriden'
     }
   };
 
@@ -608,13 +609,25 @@ const App = () => {
             </div>
 
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptUpload} style={{ display: 'none' }} />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={scanning}
-              style={{ width: '100%', padding: '13px', backgroundColor: c.saveBtn, color: 'white', border: 'none', borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontWeight: 500, fontSize: '14px', marginBottom: '16px', opacity: scanning ? 0.7 : 1 }}
-            >
-              {scanning ? '⏳ ' + t.scanning : t.receiptPhoto}
-            </button>
+            <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleReceiptUpload} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={scanning}
+                style={{ flex: 1, padding: '13px', backgroundColor: c.saveBtn, color: 'white', border: 'none', borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontWeight: 500, fontSize: '14px', opacity: scanning ? 0.7 : 1 }}
+              >
+                {scanning ? '⏳ ' + t.scanning : t.receiptPhoto}
+              </button>
+              <button
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={scanning}
+                title={t.fromGallery}
+                aria-label={t.fromGallery}
+                style={{ padding: '13px 18px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontSize: '18px', opacity: scanning ? 0.7 : 1 }}
+              >
+                📎
+              </button>
+            </div>
 
             {scanError && (
               <div style={{ backgroundColor: '#8B4548', color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>
