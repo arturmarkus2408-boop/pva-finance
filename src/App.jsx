@@ -31,6 +31,7 @@ const App = () => {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanNotice, setScanNotice] = useState('');
+  const [listening, setListening] = useState(false);
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -66,7 +67,11 @@ const App = () => {
       getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
       scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
       noKeyError: 'Сначала добавьте API-ключ в ⚙️ Настройки', close: 'Закрыть',
-      recognized: 'Проверьте данные и сохраните', fromGallery: 'Из галереи'
+      recognized: 'Проверьте данные и сохраните', fromGallery: 'Из галереи',
+      voiceInput: '🎤', voiceInputTitle: 'Голосовой ввод', voiceListening: 'Слушаю...',
+      voiceProcessing: 'Разбираю фразу...', voiceNotSupported: 'Ваш браузер не поддерживает голосовой ввод. Используйте Chrome или Safari.',
+      micDenied: 'Разрешите доступ к микрофону в настройках браузера',
+      noSpeech: 'Не услышал речи, попробуйте снова', voiceParseError: 'Не удалось разобрать фразу. Скажите чётче или введите вручную.'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -98,7 +103,11 @@ const App = () => {
       getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
       scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
       noKeyError: 'Avval ⚙️ Sozlamalarga API kalitni qo\'shing', close: 'Yopish',
-      recognized: "Ma'lumotlarni tekshirib saqlang", fromGallery: 'Galereyadan'
+      recognized: "Ma'lumotlarni tekshirib saqlang", fromGallery: 'Galereyadan',
+      voiceInput: '🎤', voiceInputTitle: 'Ovozli kiritish', voiceListening: 'Tinglayapman...',
+      voiceProcessing: 'Iborani tahlil qilyapman...', voiceNotSupported: 'Brauzeringiz ovozli kiritishni qo\'llab-quvvatlamaydi. Chrome yoki Safari ishlating.',
+      micDenied: 'Brauzer sozlamalarida mikrofonga ruxsat bering',
+      noSpeech: 'Nutq eshitilmadi, qaytadan urinib ko\'ring', voiceParseError: 'Iborani tahlil qilib bo\'lmadi. Aniqroq gapiring yoki qo\'lda kiriting.'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -130,7 +139,11 @@ const App = () => {
       getKey: 'How to get a key', keySaved: 'Key saved',
       scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
       noKeyError: 'First add an API key in ⚙️ Settings', close: 'Close',
-      recognized: 'Verify data and save', fromGallery: 'From gallery'
+      recognized: 'Verify data and save', fromGallery: 'From gallery',
+      voiceInput: '🎤', voiceInputTitle: 'Voice input', voiceListening: 'Listening...',
+      voiceProcessing: 'Parsing phrase...', voiceNotSupported: 'Your browser does not support voice input. Use Chrome or Safari.',
+      micDenied: 'Allow microphone access in browser settings',
+      noSpeech: 'Did not hear speech, try again', voiceParseError: 'Could not parse the phrase. Speak more clearly or enter manually.'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -162,7 +175,11 @@ const App = () => {
       getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
       scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
       noKeyError: 'Önce ⚙️ Ayarlar bölümünden API anahtarı ekleyin', close: 'Kapat',
-      recognized: 'Verileri kontrol edip kaydedin', fromGallery: 'Galeriden'
+      recognized: 'Verileri kontrol edip kaydedin', fromGallery: 'Galeriden',
+      voiceInput: '🎤', voiceInputTitle: 'Sesli giriş', voiceListening: 'Dinliyorum...',
+      voiceProcessing: 'İfade analiz ediliyor...', voiceNotSupported: 'Tarayıcınız sesli girişi desteklemiyor. Chrome veya Safari kullanın.',
+      micDenied: 'Tarayıcı ayarlarında mikrofona erişime izin verin',
+      noSpeech: 'Konuşma duyulmadı, tekrar deneyin', voiceParseError: 'İfade analiz edilemedi. Daha net konuşun veya manuel girin.'
     }
   };
 
@@ -423,6 +440,121 @@ const App = () => {
     }
   };
 
+  // ===== ГОЛОСОВОЙ ВВОД =====
+  const startVoiceInput = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setScanError(t.voiceNotSupported);
+      setTimeout(() => setScanError(''), 5000);
+      return;
+    }
+    if (!geminiKey) {
+      setScanError(t.noKeyError);
+      setShowSettings(true);
+      setTimeout(() => setScanError(''), 5000);
+      return;
+    }
+    const langMap = { ru: 'ru-RU', uz: 'uz-UZ', en: 'en-US', tr: 'tr-TR' };
+    const rec = new SR();
+    rec.lang = langMap[language] || 'ru-RU';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => { setListening(true); setScanError(''); setScanNotice(''); };
+    rec.onend = () => setListening(false);
+    rec.onerror = (e) => {
+      setListening(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setScanError(t.micDenied);
+      else if (e.error === 'no-speech') setScanError(t.noSpeech);
+      else setScanError(t.voiceParseError);
+      setTimeout(() => setScanError(''), 5000);
+    };
+    rec.onresult = async (e) => {
+      const text = e.results?.[0]?.[0]?.transcript;
+      setListening(false);
+      if (text) await parseVoiceText(text);
+    };
+    try { rec.start(); } catch (err) {
+      setListening(false);
+      setScanError(t.voiceParseError);
+      setTimeout(() => setScanError(''), 5000);
+    }
+  };
+
+  const parseVoiceText = async (text) => {
+    setScanning(true);
+    try {
+      const knownCats = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)])].filter(x => !['Другое','Boshqa','Other','Diğer'].includes(x));
+      const today = new Date().toISOString().split('T')[0];
+      const prompt = `Ты парсер фраз финансового приложения. Разбери фразу пользователя.
+
+Определи и верни СТРОГО JSON без markdown:
+{
+  "type": "income" (для приход/доход/зарплата/получил/фриланс) или "expense" (для расход/потратил/трата/купил/оплатил),
+  "amount": число без разделителей (примеры нормализации: "500 тысяч" → 500000, "2 миллиона" → 2000000, "полмиллиона" → 500000, "500к" → 500000, "5 млн" → 5000000),
+  "currency": "UZS" (сум/сумов/uzs/so'm), "USD" (долларов/долл/$/usd), "EUR" (евро/€/eur), "RUB" (рублей/руб/rub) или null если не указана,
+  "date": "YYYY-MM-DD" или null. Правила: "сегодня"→сегодня, "вчера"→вчера, "позавчера"→позавчера, "7 июля" или "седьмого июля" → ближайшая прошлая или сегодняшняя дата с этим числом/месяцем, "в понедельник"→ближайший прошлый понедельник. null если дата не упомянута,
+  "category": одна категория из списка ${JSON.stringify(knownCats)} если упомянута в фразе, иначе null,
+  "description": остаток фразы после извлечения всех полей выше, или null если только тип и сумма
+}
+
+Сегодняшняя дата: ${today}
+Фраза: "${text.replace(/"/g, '\\"')}"`;
+
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          })
+        }
+      );
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!raw) throw new Error('Empty response');
+      let jsonText = String(raw).trim();
+      if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+      const parsed = JSON.parse(jsonText);
+      const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
+      if (!amount || isNaN(amount)) throw new Error('No amount');
+      const txType = parsed.type === 'income' ? 'income' : 'expense';
+      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
+      if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
+      const langCats = txType === 'income' ? t.categoriesInc : t.categoriesExp;
+      let categoryValue = '';
+      let customCategoryValue = '';
+      if (parsed.category && langCats.includes(parsed.category)) {
+        categoryValue = parsed.category;
+      } else if (parsed.category) {
+        categoryValue = langCats[langCats.length - 1]; // «Другое»
+        customCategoryValue = parsed.category;
+      }
+      setFormType(txType);
+      setEditingId(null);
+      setFormData({
+        amount: String(amount),
+        category: categoryValue,
+        customCategory: customCategoryValue,
+        description: parsed.description || '',
+        date
+      });
+      setShowForm(true);
+      setActiveTab('dashboard');
+      setScanNotice(t.recognized);
+      setTimeout(() => setScanNotice(''), 4000);
+    } catch (err) {
+      console.error('Voice parse error', err);
+      setScanError(t.voiceParseError);
+      setTimeout(() => setScanError(''), 5000);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const saveGeminiKey = () => {
     const val = tempKey.trim();
     setGeminiKey(val);
@@ -610,24 +742,39 @@ const App = () => {
 
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptUpload} style={{ display: 'none' }} />
             <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleReceiptUpload} style={{ display: 'none' }} />
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={scanning}
-                style={{ flex: 1, padding: '13px', backgroundColor: c.saveBtn, color: 'white', border: 'none', borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontWeight: 500, fontSize: '14px', opacity: scanning ? 0.7 : 1 }}
+                disabled={scanning || listening}
+                style={{ flex: 1, padding: '13px', backgroundColor: c.saveBtn, color: 'white', border: 'none', borderRadius: '8px', cursor: (scanning || listening) ? 'wait' : 'pointer', fontWeight: 500, fontSize: '14px', opacity: (scanning || listening) ? 0.7 : 1 }}
               >
-                {scanning ? '⏳ ' + t.scanning : t.receiptPhoto}
+                {scanning && !listening ? '⏳ ' + t.scanning : t.receiptPhoto}
               </button>
               <button
                 onClick={() => galleryInputRef.current?.click()}
-                disabled={scanning}
+                disabled={scanning || listening}
                 title={t.fromGallery}
                 aria-label={t.fromGallery}
-                style={{ padding: '13px 18px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontSize: '18px', opacity: scanning ? 0.7 : 1 }}
+                style={{ padding: '13px 18px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: (scanning || listening) ? 'wait' : 'pointer', fontSize: '18px', opacity: (scanning || listening) ? 0.7 : 1 }}
               >
                 📎
               </button>
+              <button
+                onClick={startVoiceInput}
+                disabled={scanning || listening}
+                title={t.voiceInputTitle}
+                aria-label={t.voiceInputTitle}
+                style={{ padding: '13px 18px', backgroundColor: listening ? c.expenseColor : c.card, color: listening ? '#fff' : c.text, border: '1px solid ' + (listening ? c.expenseColor : c.border), borderRadius: '8px', cursor: (scanning || listening) ? 'wait' : 'pointer', fontSize: '18px', opacity: scanning ? 0.7 : 1, animation: listening ? 'pulse 1.2s ease-in-out infinite' : 'none' }}
+              >
+                {t.voiceInput}
+              </button>
             </div>
+            {(listening || (scanning && !fileInputRef.current?.files?.length)) && (
+              <div style={{ textAlign: 'center', fontSize: '12px', color: c.sec, marginBottom: '12px' }}>
+                {listening ? '🎙️ ' + t.voiceListening : '⏳ ' + t.voiceProcessing}
+              </div>
+            )}
+            <div style={{ height: '6px' }}></div>
 
             {scanError && (
               <div style={{ backgroundColor: '#8B4548', color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>
