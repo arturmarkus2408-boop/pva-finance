@@ -393,7 +393,37 @@ const App = () => {
     setScanNotice('');
     try {
       const base64 = await compressImage(file);
-      const prompt = 'Проанализируй фотографию чека. Найди итоговую сумму (ИТОГО, К оплате, TOTAL, TO PAY и т.п.) и дату чека. Верни СТРОГО JSON без markdown и лишнего текста в формате: {"amount": число_без_разделителей_и_валюты, "date": "YYYY-MM-DD"}. Если сумма или дата нечитаемы — используй null. Если дата на чеке в формате DD.MM.YYYY или DD/MM/YYYY — переведи в YYYY-MM-DD.';
+      const knownCats = [...new Set([...t.categoriesExp, ...transactions.filter(tx => tx.type === 'expense').map(tx => tx.category)])].filter(x => !['Другое','Boshqa','Other','Diğer'].includes(x));
+      const prompt = `Проанализируй фотографию чека и извлеки данные о покупке.
+
+Верни СТРОГО JSON без markdown в формате:
+{
+  "amount": число_без_разделителей_и_валюты,
+  "date": "YYYY-MM-DD" или null,
+  "currency": "UZS" | "USD" | "EUR" | "RUB" или null,
+  "description": "краткое описание покупки" или null,
+  "category": одно_из_известных_или_новое или null
+}
+
+Правила:
+- amount — итоговая сумма (ИТОГО, К оплате, TOTAL, TO PAY, JAMI, УМУМИЙ). Только число.
+- date — если на чеке в формате DD.MM.YYYY или DD/MM/YYYY — переведи в YYYY-MM-DD.
+- description — короткое описание в 3-8 слов о том что куплено. Примеры:
+  * Одна позиция: "Бензин АИ-95, 38.5 л"
+  * Несколько товаров: "Продукты, магазин Korzinka"
+  * Услуга: "Стрижка, барбершоп Chapman"
+  * Аптека: "Лекарства, Dori-Darmon"
+  Не включай сумму, валюту и дату в description.
+- category — категория. Известные: ${JSON.stringify(knownCats)}. Правила подбора:
+  * Бензин/АЗС → "${t.categoriesExp[4]}"
+  * Продукты/супермаркет/магазин → "${t.categoriesExp[0]}"
+  * Коммуналка/газ/свет/вода → "${t.categoriesExp[1]}"
+  * Кафе/ресторан/бар → "${t.categoriesExp[6]}"
+  * Одежда/техника/бытовое → "${t.categoriesExp[7]}"
+  * Если не подходит ни одна известная — предложи новую одним словом (например "Аптека", "Такси", "Салон красоты")
+- Все текстовые поля возвращай на языке пользователя: ${language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe'}.
+- Если данные нечитаемы — используй null для соответствующего поля.`;
+
       const response = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
         {
@@ -418,13 +448,23 @@ const App = () => {
       const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
       const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
       if (!amount || isNaN(amount)) throw new Error('No amount');
+      if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
+      const langCats = t.categoriesExp;
+      let categoryValue = '';
+      let customCategoryValue = '';
+      if (parsed.category && langCats.includes(parsed.category)) {
+        categoryValue = parsed.category;
+      } else if (parsed.category) {
+        categoryValue = langCats[langCats.length - 1]; // «Другое»
+        customCategoryValue = parsed.category;
+      }
       setFormType('expense');
       setEditingId(null);
       setFormData({
         amount: String(amount),
-        category: '',
-        customCategory: '',
-        description: '',
+        category: categoryValue,
+        customCategory: customCategoryValue,
+        description: parsed.description || '',
         date
       });
       setShowForm(true);
