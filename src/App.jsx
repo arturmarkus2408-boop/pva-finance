@@ -352,7 +352,7 @@ const App = () => {
   const reportExpense = reportData.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
 
   // ===== СЖАТИЕ ФОТО ПЕРЕД ОТПРАВКОЙ В GEMINI =====
-  const compressImage = (file, maxSide = 1600, quality = 0.85) => new Promise((resolve, reject) => {
+  const compressImage = (file, maxSide = 2000, quality = 0.92) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       let { width, height } = img;
@@ -394,35 +394,49 @@ const App = () => {
     try {
       const base64 = await compressImage(file);
       const knownCats = [...new Set([...t.categoriesExp, ...transactions.filter(tx => tx.type === 'expense').map(tx => tx.category)])].filter(x => !['Другое','Boshqa','Other','Diğer'].includes(x));
-      const prompt = `Проанализируй фотографию чека и извлеки данные о покупке.
+      const prompt = `Ты OCR финансового приложения. Проанализируй фотографию чека и извлеки данные.
 
-Верни СТРОГО JSON без markdown в формате:
-{
-  "amount": число_без_разделителей_и_валюты,
-  "date": "YYYY-MM-DD" или null,
-  "currency": "UZS" | "USD" | "EUR" | "RUB" или null,
-  "description": "краткое описание покупки" или null,
-  "category": одно_из_известных_или_новое или null
-}
+ВАЖНО: Чек может быть мятым, скомканным, снятым под углом, с тенями от складок или бликами. Внимательно ищи текст в разных областях. Если строка искривлена из-за складки — восстанови её мысленно.
 
-Правила:
-- amount — итоговая сумма (ИТОГО, К оплате, TOTAL, TO PAY, JAMI, УМУМИЙ). Только число.
-- date — если на чеке в формате DD.MM.YYYY или DD/MM/YYYY — переведи в YYYY-MM-DD.
-- description — короткое описание в 3-8 слов о том что куплено. Примеры:
-  * Одна позиция: "Бензин АИ-95, 38.5 л"
-  * Несколько товаров: "Продукты, магазин Korzinka"
-  * Услуга: "Стрижка, барбершоп Chapman"
-  * Аптека: "Лекарства, Dori-Darmon"
-  Не включай сумму, валюту и дату в description.
-- category — категория. Известные: ${JSON.stringify(knownCats)}. Правила подбора:
-  * Бензин/АЗС → "${t.categoriesExp[4]}"
-  * Продукты/супермаркет/магазин → "${t.categoriesExp[0]}"
-  * Коммуналка/газ/свет/вода → "${t.categoriesExp[1]}"
-  * Кафе/ресторан/бар → "${t.categoriesExp[6]}"
-  * Одежда/техника/бытовое → "${t.categoriesExp[7]}"
-  * Если не подходит ни одна известная — предложи новую одним словом (например "Аптека", "Такси", "Салон красоты")
-- Все текстовые поля возвращай на языке пользователя: ${language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe'}.
-- Если данные нечитаемы — используй null для соответствующего поля.`;
+Пошагово выполни:
+
+ШАГ 1 — НАЙДИ ИТОГОВУЮ СУММУ:
+- Ищи метки: "ИТОГО", "К ОПЛАТЕ", "ВСЕГО", "СУММА", "TOTAL", "TO PAY", "AMOUNT", "JAMI", "UMUMIY", "TO'LOV", "JAMI SUMMA"
+- Возле метки будет число — это и есть amount
+- Если сумма встречается на чеке несколько раз (промежуточная и итоговая) — выбирай ту, что помечена как ИТОГО, или наибольшую из финальной части чека
+- НЕ путай итог с ценами отдельных товаров или НДС
+
+ШАГ 2 — НАЙДИ ДАТУ:
+- Обычно в шапке или в подвале чека
+- Форматы: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, DD-MM-YY
+- Переведи в формат YYYY-MM-DD
+- Если чек за 2024 или ранее — не путай с сегодняшним годом
+
+ШАГ 3 — ОПРЕДЕЛИ ВАЛЮТУ:
+- "сум", "сумов", "so'm", "UZS" → UZS
+- "$", "USD", "долларов" → USD
+- "€", "EUR", "евро" → EUR
+- "₽", "руб", "рублей", "RUB" → RUB
+- Если валюта не указана явно, но чек узбекский — UZS
+
+ШАГ 4 — ОПРЕДЕЛИ ЧТО КУПЛЕНО (description):
+- 3-8 слов о содержимом. Примеры:
+  * "Бензин АИ-95, 38.5 л" (одна позиция)
+  * "Продукты, Korzinka" (много позиций → тема + магазин)
+  * "Лекарства, Dori-Darmon"
+  * "Обед, ресторан Bosh Osh"
+- Не включай сумму, валюту, дату
+
+ШАГ 5 — ПОДБЕРИ КАТЕГОРИЮ:
+- Известные категории: ${JSON.stringify(knownCats)}
+- Правила: бензин/АЗС → "${t.categoriesExp[4]}", продукты/супермаркет → "${t.categoriesExp[0]}", коммуналка → "${t.categoriesExp[1]}", кафе/ресторан → "${t.categoriesExp[6]}", одежда/техника → "${t.categoriesExp[7]}"
+- Если не подходит ни одна известная — предложи новую одним словом
+
+Все текстовые поля возвращай на языке: ${language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe'}.
+Если данные нечитаемы даже после внимательного анализа — используй null для соответствующего поля.
+
+Верни СТРОГО JSON без markdown:
+{"amount": число_без_разделителей, "date": "YYYY-MM-DD" или null, "currency": "UZS"|"USD"|"EUR"|"RUB" или null, "description": "..." или null, "category": "..." или null}`;
 
       const response = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
@@ -434,7 +448,11 @@ const App = () => {
               { inline_data: { mime_type: 'image/jpeg', data: base64 } },
               { text: prompt }
             ]}],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.1,
+              thinkingConfig: { thinkingBudget: 2048 }
+            }
           })
         }
       );
