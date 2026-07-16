@@ -879,14 +879,33 @@ const App = () => {
                 </div>
 
                 {chartType === 'pie' && chartData.length > 0 && (
-                  <ResponsiveContainer width="100%" height={320}>
-                    <PieChart>
+                  <ResponsiveContainer width="100%" height={340}>
+                    <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
                       <Pie
                         data={chartData}
-                        cx="50%" cy="45%"
-                        outerRadius={90}
+                        cx="50%" cy="42%"
+                        outerRadius={95}
                         dataKey="value"
-                        label={({ percent }) => percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''}
+                        label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+                          if (percent < 0.10) return null;
+                          const RADIAN = Math.PI / 180;
+                          const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
+                          const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                          const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                          const pct = `${(percent * 100).toFixed(0)}%`;
+                          const strokeProps = { fill: '#fff', stroke: 'rgba(0,0,0,0.65)', strokeWidth: 2.8, paintOrder: 'stroke', textAnchor: 'middle', dominantBaseline: 'central', fontWeight: 600 };
+                          if (percent < 0.15) {
+                            return <text x={x} y={y} {...strokeProps} fontSize={13}>{pct}</text>;
+                          }
+                          const maxLen = percent >= 0.30 ? 12 : 9;
+                          const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
+                          return (
+                            <g>
+                              <text x={x} y={y - 8} {...strokeProps} fontSize={11}>{displayName}</text>
+                              <text x={x} y={y + 8} {...strokeProps} fontSize={12}>{pct}</text>
+                            </g>
+                          );
+                        }}
                         labelLine={false}
                       >
                         {chartData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
@@ -897,9 +916,15 @@ const App = () => {
                       />
                       <Legend
                         verticalAlign="bottom"
-                        height={70}
+                        height={80}
                         wrapperStyle={{ fontSize: '11px', color: c.text, paddingTop: '10px' }}
                         iconType="circle"
+                        formatter={(value, entry) => {
+                          const total = chartData.reduce((s, d) => s + d.value, 0);
+                          const val = entry?.payload?.value || 0;
+                          const pct = total > 0 ? ((val / total) * 100).toFixed(0) : '0';
+                          return `${value} — ${pct}%`;
+                        }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
