@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend, LabelList } from 'recharts';
 import * as XLSX from 'xlsx';
 import './App.css';
 
@@ -305,15 +305,30 @@ const App = () => {
   const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
   const chartColors = ['#2E5C87', '#E88C1A', '#2E8B57', '#C0392B', '#8E44AD', '#7D5A3C', '#E377C2', '#17A2B8'];
 
-  // Для столбчатой: топ-6 + свернуть остальное в «Прочее»
+  // Для столбчатой: сортировка по убыванию + топ-6 + свернуть остальное в «Прочее»
   const barData = (() => {
-    if (chartData.length <= 7) return chartData;
     const sorted = [...chartData].sort((a, b) => b.value - a.value);
+    if (sorted.length <= 7) return sorted;
     const top = sorted.slice(0, 6);
     const rest = sorted.slice(6);
     const other = { name: t.otherCategory, value: rest.reduce((s, x) => s + x.value, 0) };
     return [...top, other];
   })();
+
+  // Тепловая палитра для столбчатой: топ-3 бордо → красный → оранжевый, остальные — приглушённые
+  const barColor = (idx) => {
+    if (idx === 0) return '#8B1F1F';
+    if (idx === 1) return '#C0392B';
+    if (idx === 2) return '#E67E22';
+    return '#7F8C8D';
+  };
+
+  // Компактный формат больших сумм для меток над столбцами
+  const shortNum = (v) => {
+    if (v >= 1000000) return (v / 1000000).toFixed(v >= 10000000 ? 0 : 1) + 'M';
+    if (v >= 1000) return Math.round(v / 1000) + 'K';
+    return String(v);
+  };
 
   // Для линейной: динамика доходов и расходов по времени
   const lineData = (() => {
@@ -931,8 +946,8 @@ const App = () => {
                       <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
                         <Pie
                           data={chartData}
-                          cx="50%" cy="45%"
-                          outerRadius={75}
+                          cx="50%" cy="42%"
+                          outerRadius={62}
                           startAngle={90}
                           endAngle={-270}
                           dataKey="value"
@@ -943,12 +958,12 @@ const App = () => {
                               const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
                               const x = cx + radius * Math.cos(rad);
                               const y = cy + radius * Math.sin(rad);
-                              const maxLen = percent >= 0.30 ? 12 : 9;
+                              const maxLen = percent >= 0.30 ? 10 : 7;
                               const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
                               return (
                                 <g>
-                                  <text x={x} y={y - 8} {...strokeProps} fontSize={11}>{displayName}</text>
-                                  <text x={x} y={y + 8} {...strokeProps} fontSize={12}>{`${(percent * 100).toFixed(0)}%`}</text>
+                                  <text x={x} y={y - 7} {...strokeProps} fontSize={10}>{displayName}</text>
+                                  <text x={x} y={y + 7} {...strokeProps} fontSize={11}>{`${(percent * 100).toFixed(0)}%`}</text>
                                 </g>
                               );
                             }
@@ -958,18 +973,18 @@ const App = () => {
                             const cos = Math.cos(rad), sin = Math.sin(rad);
                             const sx = cx + outerRadius * cos;
                             const sy = cy + outerRadius * sin;
-                            const mx = cx + (outerRadius + 8) * cos;
-                            const my = cy + (outerRadius + 8) * sin;
-                            const ty = cy + (outerRadius + 22) * it.finalSin;
-                            const tx = it.isRight ? cx + outerRadius + 24 : cx - outerRadius - 24;
+                            const mx = cx + (outerRadius + 6) * cos;
+                            const my = cy + (outerRadius + 6) * sin;
+                            const ty = cy + (outerRadius + 20) * it.finalSin;
+                            const tx = it.isRight ? cx + outerRadius + 18 : cx - outerRadius - 18;
                             const anchor = it.isRight ? 'start' : 'end';
                             const color = chartColors[chartData.findIndex(d => d.name === name) % chartColors.length];
-                            const displayName = name.length > 8 ? name.slice(0, 7) + '…' : name;
+                            const displayName = name.length > 6 ? name.slice(0, 5) + '…' : name;
                             return (
                               <g>
                                 <polyline points={`${sx},${sy} ${mx},${my} ${tx - (it.isRight ? 3 : -3)},${ty}`} fill="none" stroke={color} strokeWidth={1} />
                                 <circle cx={sx} cy={sy} r={2} fill={color} />
-                                <text x={tx} y={ty} textAnchor={anchor} dominantBaseline="central" fontSize={11} fill={c.text} fontWeight={500}>
+                                <text x={tx} y={ty} textAnchor={anchor} dominantBaseline="central" fontSize={10} fill={c.text} fontWeight={500}>
                                   {`${displayName} ${(percent * 100).toFixed(0)}%`}
                                 </text>
                               </g>
@@ -1001,8 +1016,8 @@ const App = () => {
                 })()}
 
                 {chartType === 'bar' && chartData.length > 0 && (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 55 }}>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart data={barData} margin={{ top: 25, right: 10, left: 0, bottom: 55 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
                       <XAxis
                         dataKey="name"
@@ -1013,13 +1028,16 @@ const App = () => {
                         style={{ fontSize: '11px' }}
                         height={60}
                       />
-                      <YAxis stroke={c.text} style={{ fontSize: '11px' }} />
+                      <YAxis stroke={c.text} style={{ fontSize: '11px' }} tickFormatter={shortNum} />
                       <Tooltip
                         contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
                         formatter={(v) => [v.toLocaleString() + ' ' + currency, '']}
                         cursor={{ fill: 'transparent' }}
                       />
-                      <Bar dataKey="value" fill={c.expenseColor} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        {barData.map((_, i) => <Cell key={i} fill={barColor(i)} />)}
+                        <LabelList dataKey="value" position="top" fill={c.text} fontSize={10} fontWeight={600} formatter={shortNum} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 )}
