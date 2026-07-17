@@ -32,6 +32,7 @@ const App = () => {
   const [scanError, setScanError] = useState('');
   const [scanNotice, setScanNotice] = useState('');
   const [listening, setListening] = useState(false);
+  const [shareNotice, setShareNotice] = useState('');
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -74,7 +75,7 @@ const App = () => {
       noSpeech: 'Не услышал речи, попробуйте снова', voiceParseError: 'Не удалось разобрать фразу. Скажите чётче или введите вручную.',
       shareReport: 'Поделиться отчётом', shareTitle: 'Wallet — Отчёт',
       shareText: 'Отчёт по расходам и доходам',
-      shareNotSupported: 'Ваш браузер не поддерживает прямую отправку. Файл сохранён, отправьте его вручную.',
+      shareNotSupported: '✓ Файл сохранён в папку «Загрузки». Чтобы отправить в мессенджер: откройте приложение «Мои файлы» → «Загрузки» → долгое нажатие на wallet-report → «Поделиться» → выберите приложение.',
       shareError: 'Не удалось отправить файл'
     },
     uz: {
@@ -114,7 +115,7 @@ const App = () => {
       noSpeech: 'Nutq eshitilmadi, qaytadan urinib ko\'ring', voiceParseError: 'Iborani tahlil qilib bo\'lmadi. Aniqroq gapiring yoki qo\'lda kiriting.',
       shareReport: 'Hisobotni ulashish', shareTitle: 'Wallet — Hisobot',
       shareText: 'Xarajat va daromadlar hisoboti',
-      shareNotSupported: 'Brauzeringiz to\'g\'ridan-to\'g\'ri jo\'natishni qo\'llab-quvvatlamaydi. Fayl saqlandi, uni qo\'lda jo\'nating.',
+      shareNotSupported: '✓ Fayl «Yuklashlar» papkasiga saqlandi. Messenjerga jo\'natish uchun: «Mening fayllarim» ilovasini oching → «Yuklashlar» → wallet-report faylini uzoq bosing → «Ulashish» → ilovani tanlang.',
       shareError: 'Faylni jo\'natib bo\'lmadi'
     },
     en: {
@@ -154,7 +155,7 @@ const App = () => {
       noSpeech: 'Did not hear speech, try again', voiceParseError: 'Could not parse the phrase. Speak more clearly or enter manually.',
       shareReport: 'Share report', shareTitle: 'Wallet — Report',
       shareText: 'Expense and income report',
-      shareNotSupported: 'Your browser does not support direct sharing. File saved, send manually.',
+      shareNotSupported: '✓ File saved to Downloads folder. To send via messenger: open "My Files" app → "Downloads" → long press wallet-report → "Share" → choose your app.',
       shareError: 'Could not send file'
     },
     tr: {
@@ -194,7 +195,7 @@ const App = () => {
       noSpeech: 'Konuşma duyulmadı, tekrar deneyin', voiceParseError: 'İfade analiz edilemedi. Daha net konuşun veya manuel girin.',
       shareReport: 'Raporu paylaş', shareTitle: 'Wallet — Rapor',
       shareText: 'Gelir ve gider raporu',
-      shareNotSupported: 'Tarayıcınız doğrudan paylaşımı desteklemiyor. Dosya kaydedildi, manuel gönderin.',
+      shareNotSupported: '✓ Dosya "İndirilenler" klasörüne kaydedildi. Mesajlaşma uygulamasına göndermek için: "Dosyalarım" uygulamasını açın → "İndirilenler" → wallet-report dosyasına uzun basın → "Paylaş" → uygulamayı seçin.',
       shareError: 'Dosya gönderilemedi'
     }
   };
@@ -672,6 +673,7 @@ const App = () => {
 
   // ===== ПОДЕЛИТЬСЯ ОТЧЁТОМ ЧЕРЕЗ WEB SHARE API =====
   const shareReport = async () => {
+    setShareNotice('');
     // Сгенерировать Excel в памяти
     const rows = reportData.map(tx => ({
       [t.date]: tx.date,
@@ -690,8 +692,8 @@ const App = () => {
     const filename = 'wallet-report-' + dateStr + '.xlsx';
     const file = new File([blob], filename, { type: blob.type });
 
-    // Fallback — скачать файл
-    const downloadFile = () => {
+    // Fallback — скачать файл + показать инструкцию
+    const downloadWithHelp = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -700,14 +702,15 @@ const App = () => {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setShareNotice(t.shareNotSupported);
+      setTimeout(() => setShareNotice(''), 15000);
     };
 
     // Пробуем через Web Share API
     if (navigator.share) {
       try {
         if (navigator.canShare && !navigator.canShare({ files: [file] })) {
-          downloadFile();
-          alert(t.shareNotSupported);
+          downloadWithHelp();
           return;
         }
         await navigator.share({
@@ -717,16 +720,14 @@ const App = () => {
         });
         return;
       } catch (err) {
-        if (err && err.name === 'AbortError') return; // пользователь отменил — не делаем ничего
+        if (err && err.name === 'AbortError') return; // пользователь отменил
         console.warn('Share API failed, downloading instead:', err);
-        downloadFile();
-        alert(t.shareNotSupported);
+        downloadWithHelp();
         return;
       }
     }
     // Web Share вообще не поддерживается
-    downloadFile();
-    alert(t.shareNotSupported);
+    downloadWithHelp();
   };
 
   // ===== ЭКСПОРТ PDF ЧЕРЕЗ ПЕЧАТЬ БРАУЗЕРА (кириллица работает всегда) =====
@@ -1210,6 +1211,12 @@ const App = () => {
                 </svg>
                 {t.shareReport}
               </button>
+              {shareNotice && (
+                <div style={{ marginTop: '10px', padding: '12px 14px', backgroundColor: c.card, color: c.text, borderRadius: '8px', fontSize: '12px', lineHeight: '1.55', border: '1px solid ' + c.incomeColor, position: 'relative' }}>
+                  <div style={{ paddingRight: '20px' }}>{shareNotice}</div>
+                  <button onClick={() => setShareNotice('')} aria-label="Закрыть" style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '16px', padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '14px' }}>
