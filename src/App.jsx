@@ -672,47 +672,61 @@ const App = () => {
 
   // ===== ПОДЕЛИТЬСЯ ОТЧЁТОМ ЧЕРЕЗ WEB SHARE API =====
   const shareReport = async () => {
-    try {
-      const rows = reportData.map(tx => ({
-        [t.date]: tx.date,
-        [t.typeLabel]: tx.type === 'income' ? t.income : t.expense,
-        [t.category]: tx.category,
-        [t.description]: tx.description || '',
-        [t.amount]: tx.amount,
-        'Валюта': tx.currency
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Wallet');
-      const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const dateStr = new Date().toISOString().split('T')[0];
-      const filename = 'wallet-report-' + dateStr + '.xlsx';
-      const file = new File([blob], filename, { type: blob.type });
+    // Сгенерировать Excel в памяти
+    const rows = reportData.map(tx => ({
+      [t.date]: tx.date,
+      [t.typeLabel]: tx.type === 'income' ? t.income : t.expense,
+      [t.category]: tx.category,
+      [t.description]: tx.description || '',
+      [t.amount]: tx.amount,
+      'Валюта': tx.currency
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Wallet');
+    const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = 'wallet-report-' + dateStr + '.xlsx';
+    const file = new File([blob], filename, { type: blob.type });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    // Fallback — скачать файл
+    const downloadFile = () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    // Пробуем через Web Share API
+    if (navigator.share) {
+      try {
+        if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+          downloadFile();
+          alert(t.shareNotSupported);
+          return;
+        }
         await navigator.share({
           files: [file],
           title: t.shareTitle,
           text: t.shareText
         });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return; // пользователь отменил — не делаем ничего
+        console.warn('Share API failed, downloading instead:', err);
+        downloadFile();
         alert(t.shareNotSupported);
-      }
-    } catch (err) {
-      if (err && err.name !== 'AbortError') {
-        console.error('Share error', err);
-        alert(t.shareError);
+        return;
       }
     }
+    // Web Share вообще не поддерживается
+    downloadFile();
+    alert(t.shareNotSupported);
   };
 
   // ===== ЭКСПОРТ PDF ЧЕРЕЗ ПЕЧАТЬ БРАУЗЕРА (кириллица работает всегда) =====
