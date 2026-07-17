@@ -303,7 +303,7 @@ const App = () => {
     categoryData[tx.category] = (categoryData[tx.category] || 0) + tx.amount;
   });
   const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
-  const chartColors = ['#1B2845', '#3F7D58', '#8B4548', '#B07D3F', '#C9A84C', '#2D6A4F', '#E24B4A', '#2C4A6E'];
+  const chartColors = ['#2E5C87', '#E88C1A', '#2E8B57', '#C0392B', '#8E44AD', '#7D5A3C', '#E377C2', '#17A2B8'];
 
   // Для столбчатой: топ-6 + свернуть остальное в «Прочее»
   const barData = (() => {
@@ -896,57 +896,109 @@ const App = () => {
                   </div>
                 </div>
 
-                {chartType === 'pie' && chartData.length > 0 && (
-                  <ResponsiveContainer width="100%" height={340}>
-                    <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
-                      <Pie
-                        data={chartData}
-                        cx="50%" cy="42%"
-                        outerRadius={95}
-                        dataKey="value"
-                        label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
-                          if (percent < 0.10) return null;
-                          const RADIAN = Math.PI / 180;
-                          const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
-                          const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                          const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                          const pct = `${(percent * 100).toFixed(0)}%`;
-                          const strokeProps = { fill: '#fff', stroke: 'rgba(0,0,0,0.65)', strokeWidth: 2.8, paintOrder: 'stroke', textAnchor: 'middle', dominantBaseline: 'central', fontWeight: 600 };
-                          if (percent < 0.15) {
-                            return <text x={x} y={y} {...strokeProps} fontSize={13}>{pct}</text>;
-                          }
-                          const maxLen = percent >= 0.30 ? 12 : 9;
-                          const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
-                          return (
-                            <g>
-                              <text x={x} y={y - 8} {...strokeProps} fontSize={11}>{displayName}</text>
-                              <text x={x} y={y + 8} {...strokeProps} fontSize={12}>{pct}</text>
-                            </g>
-                          );
-                        }}
-                        labelLine={false}
-                      >
-                        {chartData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
-                        formatter={(v) => [v.toLocaleString() + ' ' + currency, '']}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={80}
-                        wrapperStyle={{ fontSize: '11px', color: c.text, paddingTop: '10px' }}
-                        iconType="circle"
-                        formatter={(value, entry) => {
-                          const total = chartData.reduce((s, d) => s + d.value, 0);
-                          const val = entry?.payload?.value || 0;
-                          const pct = total > 0 ? ((val / total) * 100).toFixed(0) : '0';
-                          return `${value} — ${pct}%`;
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
+                {chartType === 'pie' && chartData.length > 0 && (() => {
+                  const RAD = Math.PI / 180;
+                  const totalP = chartData.reduce((s, d) => s + d.value, 0) || 1;
+                  let accP = 0;
+                  const items = chartData.map((d) => {
+                    const startPct = accP / totalP;
+                    accP += d.value;
+                    const endPct = accP / totalP;
+                    const midDeg = 90 - ((startPct + endPct) / 2) * 360;
+                    return { name: d.name, pct: d.value / totalP, midDeg };
+                  });
+                  const externals = items
+                    .filter(it => it.pct >= 0.05 && it.pct < 0.15)
+                    .map(it => {
+                      const r = -it.midDeg * RAD;
+                      return { ...it, cos: Math.cos(r), sin: Math.sin(r) };
+                    });
+                  externals.forEach(it => { it.isRight = it.cos >= 0; it.idealSin = it.sin; });
+                  const minGap = 0.35;
+                  const adjust = (list) => {
+                    list.sort((a, b) => a.idealSin - b.idealSin);
+                    let prev = -Infinity;
+                    list.forEach(it => {
+                      it.finalSin = Math.max(it.idealSin, prev + minGap);
+                      prev = it.finalSin;
+                    });
+                    return list;
+                  };
+                  const posMap = {};
+                  [...adjust(externals.filter(x => x.isRight)), ...adjust(externals.filter(x => !x.isRight))].forEach(it => { posMap[it.name] = it; });
+                  return (
+                    <ResponsiveContainer width="100%" height={340}>
+                      <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
+                        <Pie
+                          data={chartData}
+                          cx="50%" cy="45%"
+                          outerRadius={75}
+                          startAngle={90}
+                          endAngle={-270}
+                          dataKey="value"
+                          label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+                            const strokeProps = { fill: '#fff', stroke: 'rgba(0,0,0,0.65)', strokeWidth: 2.8, paintOrder: 'stroke', textAnchor: 'middle', dominantBaseline: 'central', fontWeight: 600 };
+                            const rad = -midAngle * RAD;
+                            if (percent >= 0.15) {
+                              const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
+                              const x = cx + radius * Math.cos(rad);
+                              const y = cy + radius * Math.sin(rad);
+                              const maxLen = percent >= 0.30 ? 12 : 9;
+                              const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
+                              return (
+                                <g>
+                                  <text x={x} y={y - 8} {...strokeProps} fontSize={11}>{displayName}</text>
+                                  <text x={x} y={y + 8} {...strokeProps} fontSize={12}>{`${(percent * 100).toFixed(0)}%`}</text>
+                                </g>
+                              );
+                            }
+                            if (percent < 0.05) return null;
+                            const it = posMap[name];
+                            if (!it) return null;
+                            const cos = Math.cos(rad), sin = Math.sin(rad);
+                            const sx = cx + outerRadius * cos;
+                            const sy = cy + outerRadius * sin;
+                            const mx = cx + (outerRadius + 8) * cos;
+                            const my = cy + (outerRadius + 8) * sin;
+                            const ty = cy + (outerRadius + 22) * it.finalSin;
+                            const tx = it.isRight ? cx + outerRadius + 24 : cx - outerRadius - 24;
+                            const anchor = it.isRight ? 'start' : 'end';
+                            const color = chartColors[chartData.findIndex(d => d.name === name) % chartColors.length];
+                            const displayName = name.length > 8 ? name.slice(0, 7) + '…' : name;
+                            return (
+                              <g>
+                                <polyline points={`${sx},${sy} ${mx},${my} ${tx - (it.isRight ? 3 : -3)},${ty}`} fill="none" stroke={color} strokeWidth={1} />
+                                <circle cx={sx} cy={sy} r={2} fill={color} />
+                                <text x={tx} y={ty} textAnchor={anchor} dominantBaseline="central" fontSize={11} fill={c.text} fontWeight={500}>
+                                  {`${displayName} ${(percent * 100).toFixed(0)}%`}
+                                </text>
+                              </g>
+                            );
+                          }}
+                          labelLine={false}
+                        >
+                          {chartData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
+                          formatter={(v) => [v.toLocaleString() + ' ' + currency, '']}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={80}
+                          wrapperStyle={{ fontSize: '11px', color: c.text, paddingTop: '10px' }}
+                          iconType="circle"
+                          formatter={(value, entry) => {
+                            const total = chartData.reduce((s, d) => s + d.value, 0);
+                            const val = entry?.payload?.value || 0;
+                            const pct = total > 0 ? ((val / total) * 100).toFixed(0) : '0';
+                            return `${value} — ${pct}%`;
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
 
                 {chartType === 'bar' && chartData.length > 0 && (
                   <ResponsiveContainer width="100%" height={300}>
