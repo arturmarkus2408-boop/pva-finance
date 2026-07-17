@@ -71,7 +71,11 @@ const App = () => {
       voiceInput: '🎤', voiceInputTitle: 'Голосовой ввод', voiceListening: 'Слушаю...',
       voiceProcessing: 'Разбираю фразу...', voiceNotSupported: 'Ваш браузер не поддерживает голосовой ввод. Используйте Chrome или Safari.',
       micDenied: 'Разрешите доступ к микрофону в настройках браузера',
-      noSpeech: 'Не услышал речи, попробуйте снова', voiceParseError: 'Не удалось разобрать фразу. Скажите чётче или введите вручную.'
+      noSpeech: 'Не услышал речи, попробуйте снова', voiceParseError: 'Не удалось разобрать фразу. Скажите чётче или введите вручную.',
+      shareReport: 'Поделиться отчётом', shareTitle: 'Wallet — Отчёт',
+      shareText: 'Отчёт по расходам и доходам',
+      shareNotSupported: 'Ваш браузер не поддерживает прямую отправку. Файл сохранён, отправьте его вручную.',
+      shareError: 'Не удалось отправить файл'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -107,7 +111,11 @@ const App = () => {
       voiceInput: '🎤', voiceInputTitle: 'Ovozli kiritish', voiceListening: 'Tinglayapman...',
       voiceProcessing: 'Iborani tahlil qilyapman...', voiceNotSupported: 'Brauzeringiz ovozli kiritishni qo\'llab-quvvatlamaydi. Chrome yoki Safari ishlating.',
       micDenied: 'Brauzer sozlamalarida mikrofonga ruxsat bering',
-      noSpeech: 'Nutq eshitilmadi, qaytadan urinib ko\'ring', voiceParseError: 'Iborani tahlil qilib bo\'lmadi. Aniqroq gapiring yoki qo\'lda kiriting.'
+      noSpeech: 'Nutq eshitilmadi, qaytadan urinib ko\'ring', voiceParseError: 'Iborani tahlil qilib bo\'lmadi. Aniqroq gapiring yoki qo\'lda kiriting.',
+      shareReport: 'Hisobotni ulashish', shareTitle: 'Wallet — Hisobot',
+      shareText: 'Xarajat va daromadlar hisoboti',
+      shareNotSupported: 'Brauzeringiz to\'g\'ridan-to\'g\'ri jo\'natishni qo\'llab-quvvatlamaydi. Fayl saqlandi, uni qo\'lda jo\'nating.',
+      shareError: 'Faylni jo\'natib bo\'lmadi'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -143,7 +151,11 @@ const App = () => {
       voiceInput: '🎤', voiceInputTitle: 'Voice input', voiceListening: 'Listening...',
       voiceProcessing: 'Parsing phrase...', voiceNotSupported: 'Your browser does not support voice input. Use Chrome or Safari.',
       micDenied: 'Allow microphone access in browser settings',
-      noSpeech: 'Did not hear speech, try again', voiceParseError: 'Could not parse the phrase. Speak more clearly or enter manually.'
+      noSpeech: 'Did not hear speech, try again', voiceParseError: 'Could not parse the phrase. Speak more clearly or enter manually.',
+      shareReport: 'Share report', shareTitle: 'Wallet — Report',
+      shareText: 'Expense and income report',
+      shareNotSupported: 'Your browser does not support direct sharing. File saved, send manually.',
+      shareError: 'Could not send file'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -179,7 +191,11 @@ const App = () => {
       voiceInput: '🎤', voiceInputTitle: 'Sesli giriş', voiceListening: 'Dinliyorum...',
       voiceProcessing: 'İfade analiz ediliyor...', voiceNotSupported: 'Tarayıcınız sesli girişi desteklemiyor. Chrome veya Safari kullanın.',
       micDenied: 'Tarayıcı ayarlarında mikrofona erişime izin verin',
-      noSpeech: 'Konuşma duyulmadı, tekrar deneyin', voiceParseError: 'İfade analiz edilemedi. Daha net konuşun veya manuel girin.'
+      noSpeech: 'Konuşma duyulmadı, tekrar deneyin', voiceParseError: 'İfade analiz edilemedi. Daha net konuşun veya manuel girin.',
+      shareReport: 'Raporu paylaş', shareTitle: 'Wallet — Rapor',
+      shareText: 'Gelir ve gider raporu',
+      shareNotSupported: 'Tarayıcınız doğrudan paylaşımı desteklemiyor. Dosya kaydedildi, manuel gönderin.',
+      shareError: 'Dosya gönderilemedi'
     }
   };
 
@@ -654,6 +670,51 @@ const App = () => {
     XLSX.writeFile(wb, 'wallet-report.xlsx');
   };
 
+  // ===== ПОДЕЛИТЬСЯ ОТЧЁТОМ ЧЕРЕЗ WEB SHARE API =====
+  const shareReport = async () => {
+    try {
+      const rows = reportData.map(tx => ({
+        [t.date]: tx.date,
+        [t.typeLabel]: tx.type === 'income' ? t.income : t.expense,
+        [t.category]: tx.category,
+        [t.description]: tx.description || '',
+        [t.amount]: tx.amount,
+        'Валюта': tx.currency
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Wallet');
+      const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = 'wallet-report-' + dateStr + '.xlsx';
+      const file = new File([blob], filename, { type: blob.type });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: t.shareTitle,
+          text: t.shareText
+        });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        alert(t.shareNotSupported);
+      }
+    } catch (err) {
+      if (err && err.name !== 'AbortError') {
+        console.error('Share error', err);
+        alert(t.shareError);
+      }
+    }
+  };
+
   // ===== ЭКСПОРТ PDF ЧЕРЕЗ ПЕЧАТЬ БРАУЗЕРА (кириллица работает всегда) =====
   const exportPDF = () => {
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
@@ -1121,10 +1182,20 @@ const App = () => {
                   {allCategories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <button onClick={exportExcel} style={{ flex: 1, padding: '11px', backgroundColor: '#1E5C3A', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>📊 {t.exportExcel}</button>
                 <button onClick={exportPDF} style={{ flex: 1, padding: '11px', backgroundColor: '#8B2020', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>📄 {t.exportPDF}</button>
               </div>
+              <button onClick={shareReport} style={{ width: '100%', padding: '11px', backgroundColor: '#2C5282', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="18" cy="5" r="3"/>
+                  <circle cx="6" cy="12" r="3"/>
+                  <circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+                {t.shareReport}
+              </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '14px' }}>
