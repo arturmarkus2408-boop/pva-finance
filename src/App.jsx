@@ -272,6 +272,20 @@ const App = () => {
     setShowCurrencyInput(false);
   };
 
+  // ===== НАЗВАНИЯ МЕСЯЦЕВ НА 4 ЯЗЫКАХ =====
+  const monthNames = {
+    ru: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+    uz: ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'],
+    en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+    tr: ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+  };
+  const formatMonthLabel = (dateStr) => {
+    const [y, m] = dateStr.split('-');
+    const monthIdx = parseInt(m, 10) - 1;
+    const names = monthNames[language] || monthNames.ru;
+    return names[monthIdx] + ' ' + y;
+  };
+
   // ===== ФИЛЬТР ПО ПЕРИОДУ ДЛЯ ГЛАВНОГО ЭКРАНА =====
   const getPeriodRange = (period) => {
     const now = new Date();
@@ -319,7 +333,9 @@ const App = () => {
   periodTransactions.filter(tx => tx.type === 'expense').forEach(tx => {
     categoryData[tx.category] = (categoryData[tx.category] || 0) + tx.amount;
   });
-  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
+  const chartData = Object.entries(categoryData)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
   const chartColors = ['#2E5C87', '#E88C1A', '#2E8B57', '#C0392B', '#8E44AD', '#7D5A3C', '#E377C2', '#17A2B8'];
 
   // Для столбчатой: сортировка по убыванию + топ-6 + свернуть остальное в «Прочее»
@@ -365,7 +381,38 @@ const App = () => {
     return Object.values(buckets).sort((a, b) => a.name.localeCompare(b.name));
   })();
 
+  // ===== ПОМЕСЯЧНАЯ СВОДКА ДЛЯ СПИСКА ОПЕРАЦИЙ =====
+  // По каждому месяцу: суммы прихода/расхода в текущей валюте + ранги расходов (топ-3 = светофор)
+  const monthlySummary = (() => {
+    const map = {};
+    transactions.forEach(tx => {
+      if (tx.currency !== currency) return;
+      const month = tx.date.substring(0, 7);
+      if (!map[month]) map[month] = { income: 0, expense: 0, expenses: [] };
+      map[month][tx.type] += tx.amount;
+      if (tx.type === 'expense') map[month].expenses.push(tx);
+    });
+    Object.values(map).forEach(m => {
+      m.expenses.sort((a, b) => b.amount - a.amount);
+      m.expenseRank = {};
+      m.expenses.forEach((tx, i) => { m.expenseRank[tx.id] = i; });
+    });
+    return map;
+  })();
+
+  // Цвет расхода: топ-1/2/3 в месяце — светофор, остальные — обычный
+  const getExpenseColor = (tx) => {
+    if (tx.currency !== currency) return c.expenseColor; // не текущая валюта — не участвует в светофоре
+    const month = tx.date.substring(0, 7);
+    const rank = monthlySummary[month]?.expenseRank?.[tx.id];
+    if (rank === 0) return '#8B1F1F';
+    if (rank === 1) return '#C0392B';
+    if (rank === 2) return '#E67E22';
+    return c.expenseColor;
+  };
+
   const cats = formType === 'income' ? t.categoriesInc : t.categoriesExp;
+
 
   const allCategories = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)].filter(cat => !['Другое','Boshqa','Other','Diğer'].includes(cat)))];
 
@@ -1146,23 +1193,59 @@ const App = () => {
               {transactions.length === 0 ? (
                 <div style={{ color: c.sec, textAlign: 'center', padding: '20px' }}>{t.noOperations}</div>
               ) : (
-                transactions.slice().reverse().map((tx, i) => (
-                  <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < transactions.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                      <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ color: tx.type === 'income' ? c.incomeColor : c.expenseColor, fontWeight: 600, fontSize: '14px' }}>
-                        {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
-                        <button onClick={() => startEdit(tx)} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
-                        <button onClick={() => deleteTransaction(tx.id)} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                (() => {
+                  const sorted = transactions.slice().sort((a, b) => {
+                    const dateCmp = b.date.localeCompare(a.date);
+                    return dateCmp !== 0 ? dateCmp : b.id - a.id;
+                  });
+                  return sorted.map((tx, i) => {
+                    const currentMonth = tx.date.substring(0, 7);
+                    const prevMonth = i > 0 ? sorted[i - 1].date.substring(0, 7) : null;
+                    const showHeader = currentMonth !== prevMonth;
+                    const monthTotals = monthlySummary[currentMonth];
+                    const amountColor = tx.type === 'income' ? c.incomeColor : getExpenseColor(tx);
+                    return (
+                      <React.Fragment key={tx.id}>
+                        {showHeader && (
+                          <div style={{ marginTop: i === 0 ? 0 : '14px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                              {formatMonthLabel(tx.date)}
+                            </div>
+                            {monthTotals && (monthTotals.income > 0 || monthTotals.expense > 0) && (
+                              <div style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                {monthTotals.income > 0 && (
+                                  <span style={{ color: c.incomeColor }}>+{shortNum(monthTotals.income)}</span>
+                                )}
+                                {monthTotals.income > 0 && monthTotals.expense > 0 && (
+                                  <span style={{ color: c.sec, margin: '0 6px' }}>·</span>
+                                )}
+                                {monthTotals.expense > 0 && (
+                                  <span style={{ color: c.expenseColor }}>−{shortNum(monthTotals.expense)}</span>
+                                )}
+                                <span style={{ color: c.sec, marginLeft: '4px' }}>{currency}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: (i < sorted.length - 1 && sorted[i + 1].date.substring(0, 7) === currentMonth) ? '1px solid ' + c.border : 'none', gap: '10px' }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
+                            <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
+                              {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
+                              <button onClick={() => startEdit(tx)} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
+                              <button onClick={() => deleteTransaction(tx.id)} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
+                            </div>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  });
+                })()
               )}
             </div>
           </>
