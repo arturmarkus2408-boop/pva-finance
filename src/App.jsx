@@ -1076,80 +1076,75 @@ const App = () => {
                   };
                   const posMap = {};
                   [...adjust(externals.filter(x => x.isRight)), ...adjust(externals.filter(x => !x.isRight))].forEach(it => { posMap[it.name] = it; });
-                  // Явный payload для легенды — гарантирует порядок и цвета
-                  const legendPayload = pieData.map((d, i) => ({
-                    value: `${d.name} — ${((d.value / totalP) * 100).toFixed(0)}%`,
-                    type: 'circle',
-                    color: chartColors[i % chartColors.length],
-                    id: d.name,
-                    payload: { value: d.value }
-                  }));
                   return (
-                    <ResponsiveContainer width="100%" height={340}>
-                      <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
-                        <Pie
-                          data={pieData}
-                          cx="50%" cy="42%"
-                          outerRadius={62}
-                          startAngle={90}
-                          endAngle={-270}
-                          dataKey="value"
-                          label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
-                            const strokeProps = { fill: '#fff', stroke: 'rgba(0,0,0,0.65)', strokeWidth: 2.8, paintOrder: 'stroke', textAnchor: 'middle', dominantBaseline: 'central', fontWeight: 600 };
-                            const rad = -midAngle * RAD;
-                            if (percent >= 0.15) {
-                              const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
-                              const x = cx + radius * Math.cos(rad);
-                              const y = cy + radius * Math.sin(rad);
-                              const maxLen = percent >= 0.30 ? 10 : 7;
-                              const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
+                    <>
+                      <ResponsiveContainer width="100%" height={270}>
+                        <PieChart margin={{ top: 15, bottom: 5, left: 0, right: 0 }}>
+                          <Pie
+                            data={pieData}
+                            cx="50%" cy="50%"
+                            outerRadius={70}
+                            startAngle={90}
+                            endAngle={-270}
+                            dataKey="value"
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+                              const strokeProps = { fill: '#fff', stroke: 'rgba(0,0,0,0.65)', strokeWidth: 2.8, paintOrder: 'stroke', textAnchor: 'middle', dominantBaseline: 'central', fontWeight: 600 };
+                              const rad = -midAngle * RAD;
+                              if (percent >= 0.15) {
+                                const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
+                                const x = cx + radius * Math.cos(rad);
+                                const y = cy + radius * Math.sin(rad);
+                                const maxLen = percent >= 0.30 ? 10 : 7;
+                                const displayName = name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
+                                return (
+                                  <g>
+                                    <text x={x} y={y - 7} {...strokeProps} fontSize={10}>{displayName}</text>
+                                    <text x={x} y={y + 7} {...strokeProps} fontSize={11}>{`${(percent * 100).toFixed(0)}%`}</text>
+                                  </g>
+                                );
+                              }
+                              if (percent < 0.05) return null;
+                              const it = posMap[name];
+                              if (!it) return null;
+                              const cos = Math.cos(rad), sin = Math.sin(rad);
+                              const sx = cx + outerRadius * cos;
+                              const sy = cy + outerRadius * sin;
+                              const mx = cx + (outerRadius + 6) * cos;
+                              const my = cy + (outerRadius + 6) * sin;
+                              const ty = cy + (outerRadius + 20) * it.finalSin;
+                              const tx = it.isRight ? cx + outerRadius + 18 : cx - outerRadius - 18;
+                              const anchor = it.isRight ? 'start' : 'end';
+                              const color = chartColors[pieData.findIndex(d => d.name === name) % chartColors.length];
+                              const displayName = name.length > 6 ? name.slice(0, 5) + '…' : name;
                               return (
                                 <g>
-                                  <text x={x} y={y - 7} {...strokeProps} fontSize={10}>{displayName}</text>
-                                  <text x={x} y={y + 7} {...strokeProps} fontSize={11}>{`${(percent * 100).toFixed(0)}%`}</text>
+                                  <polyline points={`${sx},${sy} ${mx},${my} ${tx - (it.isRight ? 3 : -3)},${ty}`} fill="none" stroke={color} strokeWidth={1} />
+                                  <circle cx={sx} cy={sy} r={2} fill={color} />
+                                  <text x={tx} y={ty} textAnchor={anchor} dominantBaseline="central" fontSize={10} fill={c.text} fontWeight={500}>
+                                    {`${displayName} ${(percent * 100).toFixed(0)}%`}
+                                  </text>
                                 </g>
                               );
-                            }
-                            if (percent < 0.05) return null;
-                            const it = posMap[name];
-                            if (!it) return null;
-                            const cos = Math.cos(rad), sin = Math.sin(rad);
-                            const sx = cx + outerRadius * cos;
-                            const sy = cy + outerRadius * sin;
-                            const mx = cx + (outerRadius + 6) * cos;
-                            const my = cy + (outerRadius + 6) * sin;
-                            const ty = cy + (outerRadius + 20) * it.finalSin;
-                            const tx = it.isRight ? cx + outerRadius + 18 : cx - outerRadius - 18;
-                            const anchor = it.isRight ? 'start' : 'end';
-                            const color = chartColors[pieData.findIndex(d => d.name === name) % chartColors.length];
-                            const displayName = name.length > 6 ? name.slice(0, 5) + '…' : name;
-                            return (
-                              <g>
-                                <polyline points={`${sx},${sy} ${mx},${my} ${tx - (it.isRight ? 3 : -3)},${ty}`} fill="none" stroke={color} strokeWidth={1} />
-                                <circle cx={sx} cy={sy} r={2} fill={color} />
-                                <text x={tx} y={ty} textAnchor={anchor} dominantBaseline="central" fontSize={10} fill={c.text} fontWeight={500}>
-                                  {`${displayName} ${(percent * 100).toFixed(0)}%`}
-                                </text>
-                              </g>
-                            );
-                          }}
-                          labelLine={false}
-                        >
-                          {pieData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
-                          formatter={(v) => [v.toLocaleString() + ' ' + currency, '']}
-                        />
-                        <Legend
-                          verticalAlign="bottom"
-                          height={80}
-                          wrapperStyle={{ fontSize: '11px', color: c.text, paddingTop: '10px' }}
-                          iconType="circle"
-                          payload={legendPayload}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                            }}
+                            labelLine={false}
+                          >
+                            {pieData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
+                            formatter={(v) => [v.toLocaleString() + ' ' + currency, '']}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px 12px', marginTop: '10px', fontSize: '11px', color: c.text }}>
+                        {pieData.map((d, i) => (
+                          <div key={d.name} style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                            <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', backgroundColor: chartColors[i % chartColors.length], marginRight: 7, flexShrink: 0 }}></span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name} — {((d.value / totalP) * 100).toFixed(0)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   );
                 })()}
 
