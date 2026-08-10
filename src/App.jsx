@@ -1217,8 +1217,8 @@ const App = () => {
                     return (
                       <React.Fragment key={tx.id}>
                         {showHeader && (
-                          <div style={{ marginTop: i === 0 ? 0 : '14px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                          <div style={{ marginTop: i === 0 ? 0 : '18px', marginBottom: '4px', padding: '10px 14px', backgroundColor: c.saveBtn + '22', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                               {formatMonthLabel(tx.date)}
                             </div>
                             {monthTotals && (monthTotals.income > 0 || monthTotals.expense > 0) && (
