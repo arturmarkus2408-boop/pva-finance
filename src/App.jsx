@@ -336,7 +336,19 @@ const App = () => {
   const chartData = Object.entries(categoryData)
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
-  const chartColors = ['#2E5C87', '#E88C1A', '#2E8B57', '#C0392B', '#8E44AD', '#7D5A3C', '#E377C2', '#17A2B8'];
+
+  // Для круговой: сворачиваем категории <3% в "Прочее" чтобы не было каши микро-секторов
+  const pieData = (() => {
+    const total = chartData.reduce((s, d) => s + d.value, 0) || 1;
+    const threshold = 0.03;
+    const big = chartData.filter(d => d.value / total >= threshold);
+    const small = chartData.filter(d => d.value / total < threshold);
+    if (small.length === 0) return chartData;
+    const otherValue = small.reduce((s, x) => s + x.value, 0);
+    if (otherValue === 0) return big;
+    return [...big, { name: t.otherCategory, value: otherValue }];
+  })();
+  const chartColors = ['#8B1F1F', '#C0392B', '#E67E22', '#D4AC0D', '#95A5A6', '#7F8C8D', '#5D6D7E', '#34495E'];
 
   // Для столбчатой: сортировка по убыванию + топ-6 + свернуть остальное в «Прочее»
   const barData = (() => {
@@ -1034,11 +1046,11 @@ const App = () => {
                   </div>
                 </div>
 
-                {chartType === 'pie' && chartData.length > 0 && (() => {
+                {chartType === 'pie' && pieData.length > 0 && (() => {
                   const RAD = Math.PI / 180;
-                  const totalP = chartData.reduce((s, d) => s + d.value, 0) || 1;
+                  const totalP = pieData.reduce((s, d) => s + d.value, 0) || 1;
                   let accP = 0;
-                  const items = chartData.map((d) => {
+                  const items = pieData.map((d) => {
                     const startPct = accP / totalP;
                     accP += d.value;
                     const endPct = accP / totalP;
@@ -1064,11 +1076,19 @@ const App = () => {
                   };
                   const posMap = {};
                   [...adjust(externals.filter(x => x.isRight)), ...adjust(externals.filter(x => !x.isRight))].forEach(it => { posMap[it.name] = it; });
+                  // Явный payload для легенды — гарантирует порядок и цвета
+                  const legendPayload = pieData.map((d, i) => ({
+                    value: `${d.name} — ${((d.value / totalP) * 100).toFixed(0)}%`,
+                    type: 'circle',
+                    color: chartColors[i % chartColors.length],
+                    id: d.name,
+                    payload: { value: d.value }
+                  }));
                   return (
                     <ResponsiveContainer width="100%" height={340}>
                       <PieChart margin={{ top: 15, bottom: 0, left: 0, right: 0 }}>
                         <Pie
-                          data={chartData}
+                          data={pieData}
                           cx="50%" cy="42%"
                           outerRadius={62}
                           startAngle={90}
@@ -1101,7 +1121,7 @@ const App = () => {
                             const ty = cy + (outerRadius + 20) * it.finalSin;
                             const tx = it.isRight ? cx + outerRadius + 18 : cx - outerRadius - 18;
                             const anchor = it.isRight ? 'start' : 'end';
-                            const color = chartColors[chartData.findIndex(d => d.name === name) % chartColors.length];
+                            const color = chartColors[pieData.findIndex(d => d.name === name) % chartColors.length];
                             const displayName = name.length > 6 ? name.slice(0, 5) + '…' : name;
                             return (
                               <g>
@@ -1115,7 +1135,7 @@ const App = () => {
                           }}
                           labelLine={false}
                         >
-                          {chartData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
+                          {pieData.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
                         </Pie>
                         <Tooltip
                           contentStyle={{ backgroundColor: c.card, border: '1px solid ' + c.border, color: c.text, fontSize: '12px' }}
@@ -1126,12 +1146,7 @@ const App = () => {
                           height={80}
                           wrapperStyle={{ fontSize: '11px', color: c.text, paddingTop: '10px' }}
                           iconType="circle"
-                          formatter={(value, entry) => {
-                            const total = chartData.reduce((s, d) => s + d.value, 0);
-                            const val = entry?.payload?.value || 0;
-                            const pct = total > 0 ? ((val / total) * 100).toFixed(0) : '0';
-                            return `${value} — ${pct}%`;
-                          }}
+                          payload={legendPayload}
                         />
                       </PieChart>
                     </ResponsiveContainer>
