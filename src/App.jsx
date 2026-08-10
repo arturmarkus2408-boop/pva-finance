@@ -33,6 +33,7 @@ const App = () => {
   const [scanNotice, setScanNotice] = useState('');
   const [listening, setListening] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
+  const [expandedMonths, setExpandedMonths] = useState(new Set());
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -226,6 +227,11 @@ const App = () => {
     }
     localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod }));
   }, [transactions, theme, language, currency, currencies, dashboardPeriod]);
+
+  // Автосворачивание раскрытых прошлых месяцев при любом действии вне списка
+  useEffect(() => {
+    setExpandedMonths(new Set());
+  }, [dashboardPeriod, language, theme, currency, activeTab, showForm, showSettings, listening, scanning]);
 
   const themes = {
     light: { bg: '#F7F4ED', text: '#1B2845', sec: '#5F5E5A', card: '#FFFFFF', border: '#E0DCD0', incomeColor: '#3F7D58', expenseColor: '#8B4548', saveBtn: '#B07D3F', tabActive: '#1B2845', tabText: '#FFFFFF' },
@@ -1208,21 +1214,43 @@ const App = () => {
                     const dateCmp = b.date.localeCompare(a.date);
                     return dateCmp !== 0 ? dateCmp : b.id - a.id;
                   });
-                  return sorted.map((tx, i) => {
-                    const currentMonth = tx.date.substring(0, 7);
-                    const prevMonth = i > 0 ? sorted[i - 1].date.substring(0, 7) : null;
-                    const showHeader = currentMonth !== prevMonth;
-                    const monthTotals = monthlySummary[currentMonth];
-                    const amountColor = tx.type === 'income' ? c.incomeColor : getExpenseColor(tx);
+                  // Группируем по месяцам
+                  const grouped = {};
+                  sorted.forEach(tx => {
+                    const m = tx.date.substring(0, 7);
+                    if (!grouped[m]) grouped[m] = [];
+                    grouped[m].push(tx);
+                  });
+                  const monthKeys = Object.keys(grouped).sort().reverse();
+                  const alwaysExpanded = monthKeys[0]; // самый свежий месяц всегда раскрыт
+                  const toggleMonth = (m) => {
+                    setExpandedMonths(prev => {
+                      const next = new Set(prev);
+                      if (next.has(m)) next.delete(m); else next.add(m);
+                      return next;
+                    });
+                  };
+                  return monthKeys.map((monthKey, mi) => {
+                    const isAlways = monthKey === alwaysExpanded;
+                    const isExpanded = isAlways || expandedMonths.has(monthKey);
+                    const monthTxs = grouped[monthKey];
+                    const monthTotals = monthlySummary[monthKey];
+                    const anchorDate = monthTxs[0].date;
                     return (
-                      <React.Fragment key={tx.id}>
-                        {showHeader && (
-                          <div style={{ marginTop: i === 0 ? 0 : '18px', marginBottom: '4px', padding: '10px 14px', backgroundColor: c.saveBtn + '22', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                              {formatMonthLabel(tx.date)}
-                            </div>
+                      <React.Fragment key={monthKey}>
+                        <div
+                          onClick={isAlways ? undefined : () => toggleMonth(monthKey)}
+                          role={isAlways ? undefined : 'button'}
+                          tabIndex={isAlways ? undefined : 0}
+                          onKeyDown={isAlways ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMonth(monthKey); } }}
+                          style={{ marginTop: mi === 0 ? 0 : '18px', marginBottom: '4px', padding: '10px 14px', backgroundColor: c.saveBtn + '22', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', cursor: isAlways ? 'default' : 'pointer', userSelect: 'none' }}
+                        >
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                            {formatMonthLabel(anchorDate)}
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                             {monthTotals && (monthTotals.income > 0 || monthTotals.expense > 0) && (
-                              <div style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                              <span>
                                 {monthTotals.income > 0 && (
                                   <span style={{ color: c.incomeColor }}>+{shortNum(monthTotals.income)}</span>
                                 )}
@@ -1233,25 +1261,35 @@ const App = () => {
                                   <span style={{ color: c.expenseColor }}>−{shortNum(monthTotals.expense)}</span>
                                 )}
                                 <span style={{ color: c.sec, marginLeft: '4px' }}>{currency}</span>
-                              </div>
+                              </span>
+                            )}
+                            {!isAlways && (
+                              <span style={{ color: c.saveBtn, fontSize: '10px', marginLeft: '2px' }}>
+                                {isExpanded ? '▲' : '▼'}
+                              </span>
                             )}
                           </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: (i < sorted.length - 1 && sorted[i + 1].date.substring(0, 7) === currentMonth) ? '1px solid ' + c.border : 'none', gap: '10px' }}>
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                            <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
-                              {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
-                              <button onClick={() => startEdit(tx)} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
-                              <button onClick={() => deleteTransaction(tx.id)} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
-                            </div>
-                          </div>
                         </div>
+                        {isExpanded && monthTxs.map((tx, i) => {
+                          const amountColor = tx.type === 'income' ? c.incomeColor : getExpenseColor(tx);
+                          return (
+                            <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < monthTxs.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
+                                <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
+                                  {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
+                                  <button onClick={(e) => { e.stopPropagation(); startEdit(tx); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
+                                  <button onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   });
