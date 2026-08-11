@@ -34,6 +34,7 @@ const App = () => {
   const [listening, setListening] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
   const [expandedMonths, setExpandedMonths] = useState(new Set());
+  const [expandedYears, setExpandedYears] = useState(new Set());
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -228,9 +229,10 @@ const App = () => {
     localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod }));
   }, [transactions, theme, language, currency, currencies, dashboardPeriod]);
 
-  // Автосворачивание раскрытых прошлых месяцев при любом действии вне списка
+  // Автосворачивание раскрытых прошлых месяцев и годов при любом действии вне списка
   useEffect(() => {
     setExpandedMonths(new Set());
+    setExpandedYears(new Set());
   }, [dashboardPeriod, language, theme, currency, activeTab, showForm, showSettings, listening, scanning]);
 
   const themes = {
@@ -399,8 +401,9 @@ const App = () => {
     return Object.values(buckets).sort((a, b) => a.name.localeCompare(b.name));
   })();
 
-  // ===== ПОМЕСЯЧНАЯ СВОДКА ДЛЯ СПИСКА ОПЕРАЦИЙ =====
+  // ===== ПОМЕСЯЧНАЯ И ПОГОДОВАЯ СВОДКА ДЛЯ СПИСКА ОПЕРАЦИЙ =====
   // По каждому месяцу: суммы прихода/расхода в текущей валюте + ранги расходов (топ-3 = светофор)
+  // По каждому году: суммарные приход/расход в текущей валюте
   const monthlySummary = (() => {
     const map = {};
     transactions.forEach(tx => {
@@ -414,6 +417,17 @@ const App = () => {
       m.expenses.sort((a, b) => b.amount - a.amount);
       m.expenseRank = {};
       m.expenses.forEach((tx, i) => { m.expenseRank[tx.id] = i; });
+    });
+    return map;
+  })();
+
+  const yearlySummary = (() => {
+    const map = {};
+    transactions.forEach(tx => {
+      if (tx.currency !== currency) return;
+      const year = tx.date.substring(0, 4);
+      if (!map[year]) map[year] = { income: 0, expense: 0 };
+      map[year][tx.type] += tx.amount;
     });
     return map;
   })();
@@ -1214,15 +1228,18 @@ const App = () => {
                     const dateCmp = b.date.localeCompare(a.date);
                     return dateCmp !== 0 ? dateCmp : b.id - a.id;
                   });
-                  // Группируем по месяцам
-                  const grouped = {};
+                  // Группируем по годам и месяцам
+                  const byYear = {};
                   sorted.forEach(tx => {
+                    const y = tx.date.substring(0, 4);
                     const m = tx.date.substring(0, 7);
-                    if (!grouped[m]) grouped[m] = [];
-                    grouped[m].push(tx);
+                    if (!byYear[y]) byYear[y] = {};
+                    if (!byYear[y][m]) byYear[y][m] = [];
+                    byYear[y][m].push(tx);
                   });
-                  const monthKeys = Object.keys(grouped).sort().reverse();
-                  const alwaysExpanded = monthKeys[0]; // самый свежий месяц всегда раскрыт
+                  const yearKeys = Object.keys(byYear).sort().reverse();
+                  const currentYear = yearKeys[0]; // самый свежий год всегда раскрыт без плашки
+
                   const toggleMonth = (m) => {
                     setExpandedMonths(prev => {
                       const next = new Set(prev);
@@ -1230,20 +1247,26 @@ const App = () => {
                       return next;
                     });
                   };
-                  return monthKeys.map((monthKey, mi) => {
-                    const isAlways = monthKey === alwaysExpanded;
-                    const isExpanded = isAlways || expandedMonths.has(monthKey);
-                    const monthTxs = grouped[monthKey];
+                  const toggleYear = (y) => {
+                    setExpandedYears(prev => {
+                      const next = new Set(prev);
+                      if (next.has(y)) next.delete(y); else next.add(y);
+                      return next;
+                    });
+                  };
+
+                  const renderMonthBlock = (monthKey, monthTxs, mi, alwaysExpanded) => {
+                    const isExpanded = alwaysExpanded || expandedMonths.has(monthKey);
                     const monthTotals = monthlySummary[monthKey];
                     const anchorDate = monthTxs[0].date;
                     return (
                       <React.Fragment key={monthKey}>
                         <div
-                          onClick={isAlways ? undefined : () => toggleMonth(monthKey)}
-                          role={isAlways ? undefined : 'button'}
-                          tabIndex={isAlways ? undefined : 0}
-                          onKeyDown={isAlways ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMonth(monthKey); } }}
-                          style={{ marginTop: mi === 0 ? 0 : '18px', marginBottom: '4px', padding: '10px 14px', backgroundColor: c.saveBtn + '22', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', cursor: isAlways ? 'default' : 'pointer', userSelect: 'none' }}
+                          onClick={alwaysExpanded ? undefined : () => toggleMonth(monthKey)}
+                          role={alwaysExpanded ? undefined : 'button'}
+                          tabIndex={alwaysExpanded ? undefined : 0}
+                          onKeyDown={alwaysExpanded ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMonth(monthKey); } }}
+                          style={{ marginTop: mi === 0 ? 0 : '10px', marginBottom: '4px', padding: '10px 14px', backgroundColor: c.saveBtn + '22', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', cursor: alwaysExpanded ? 'default' : 'pointer', userSelect: 'none' }}
                         >
                           <div style={{ fontSize: '12px', fontWeight: 600, color: c.saveBtn, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                             {formatMonthLabel(anchorDate)}
@@ -1263,7 +1286,7 @@ const App = () => {
                                 <span style={{ color: c.sec, marginLeft: '4px' }}>{currency}</span>
                               </span>
                             )}
-                            {!isAlways && (
+                            {!alwaysExpanded && (
                               <span style={{ color: c.saveBtn, fontSize: '10px', marginLeft: '2px' }}>
                                 {isExpanded ? '▲' : '▼'}
                               </span>
@@ -1289,6 +1312,55 @@ const App = () => {
                               </div>
                             </div>
                           );
+                        })}
+                      </React.Fragment>
+                    );
+                  };
+
+                  return yearKeys.map((yearKey, yi) => {
+                    const isCurrentYear = yearKey === currentYear;
+                    const isYearExpanded = isCurrentYear || expandedYears.has(yearKey);
+                    const monthsOfYear = byYear[yearKey];
+                    const monthKeys = Object.keys(monthsOfYear).sort().reverse();
+                    const yearTotals = yearlySummary[yearKey];
+                    return (
+                      <React.Fragment key={yearKey}>
+                        {!isCurrentYear && (
+                          <div
+                            onClick={() => toggleYear(yearKey)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleYear(yearKey); } }}
+                            style={{ marginTop: '22px', marginBottom: '6px', padding: '13px 15px', backgroundColor: c.saveBtn + '44', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: c.saveBtn, letterSpacing: '0.5px' }}>
+                              {yearKey}
+                            </div>
+                            <div style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                              {yearTotals && (yearTotals.income > 0 || yearTotals.expense > 0) && (
+                                <span>
+                                  {yearTotals.income > 0 && (
+                                    <span style={{ color: c.incomeColor }}>+{shortNum(yearTotals.income)}</span>
+                                  )}
+                                  {yearTotals.income > 0 && yearTotals.expense > 0 && (
+                                    <span style={{ color: c.sec, margin: '0 6px' }}>·</span>
+                                  )}
+                                  {yearTotals.expense > 0 && (
+                                    <span style={{ color: c.expenseColor }}>−{shortNum(yearTotals.expense)}</span>
+                                  )}
+                                  <span style={{ color: c.sec, marginLeft: '4px' }}>{currency}</span>
+                                </span>
+                              )}
+                              <span style={{ color: c.saveBtn, fontSize: '11px', marginLeft: '2px' }}>
+                                {isYearExpanded ? '▲' : '▼'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {isYearExpanded && monthKeys.map((monthKey, mi) => {
+                          // В текущем году самый свежий месяц раскрыт по умолчанию
+                          const alwaysExpanded = isCurrentYear && mi === 0;
+                          return renderMonthBlock(monthKey, monthsOfYear[monthKey], mi, alwaysExpanded);
                         })}
                       </React.Fragment>
                     );
