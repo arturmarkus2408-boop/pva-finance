@@ -35,6 +35,15 @@ const App = () => {
   const [shareNotice, setShareNotice] = useState('');
   const [expandedMonths, setExpandedMonths] = useState(new Set());
   const [expandedYears, setExpandedYears] = useState(new Set());
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState('');
+  const [aiAnalysisPeriod, setAiAnalysisPeriod] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatUseFinData, setChatUseFinData] = useState(false);
+  const chatEndRef = useRef(null);
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -78,7 +87,25 @@ const App = () => {
       shareReport: 'Поделиться отчётом', shareTitle: 'Wallet — Отчёт',
       shareText: 'Отчёт по расходам и доходам',
       shareNotSupported: '✓ Файл сохранён в папку «Загрузки». Чтобы отправить в мессенджер: откройте приложение «Мои файлы» → «Загрузки» → долгое нажатие на wallet-report → «Поделиться» → выберите приложение.',
-      shareError: 'Не удалось отправить файл'
+      shareError: 'Не удалось отправить файл',
+      aiAnalysisTitle: '🧠 AI-анализ', aiAnalysisRun: 'Анализировать', aiAnalysisRefresh: 'Обновить',
+      aiAnalysisLoading: 'AI изучает твои финансы...',
+      aiAnalysisIntro: 'Нажми кнопку чтобы получить AI-анализ твоих трат за выбранный период.',
+      aiAnalysisFailed: 'Не удалось получить анализ. Проверь API-ключ и подключение к интернету.',
+      aiAnalysisNoData: 'За выбранный период недостаточно данных для анализа. Добавь несколько операций.',
+      aiSectionMain: '🔍 Что заметил', aiSectionTrends: '📊 Тренды', aiSectionAdvice: '💡 Совет',
+      assistant: 'Ассистент', chatTitle: '🤖 Финансовый ассистент',
+      chatPlaceholder: 'Спроси о налогах, учёте, финансах...',
+      chatSend: 'Отправить', chatClear: 'Очистить чат', chatConfirmClear: 'Очистить всю переписку?',
+      chatEmpty: 'Задай вопрос по налогам, бухгалтерии, финансам или своим тратам.',
+      chatLoading: 'Ассистент думает...',
+      chatUseFinDataLabel: 'Учитывать мои финансы в ответе',
+      chatDisclaimer: 'Это AI-ответы. Для юридически важных решений консультируйся с юристом или бухгалтером.',
+      chatSuggestions: 'Например:',
+      chatExample1: 'Как рассчитать НДФЛ с зарплаты?',
+      chatExample2: 'Что такое единый налоговый платёж для ИП?',
+      chatExample3: 'Как оформить самозанятость в Узбекистане?',
+      chatExample4: 'Куда я больше всего трачу деньги?'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -118,7 +145,25 @@ const App = () => {
       shareReport: 'Hisobotni ulashish', shareTitle: 'Wallet — Hisobot',
       shareText: 'Xarajat va daromadlar hisoboti',
       shareNotSupported: '✓ Fayl «Yuklashlar» papkasiga saqlandi. Messenjerga jo\'natish uchun: «Mening fayllarim» ilovasini oching → «Yuklashlar» → wallet-report faylini uzoq bosing → «Ulashish» → ilovani tanlang.',
-      shareError: 'Faylni jo\'natib bo\'lmadi'
+      shareError: 'Faylni jo\'natib bo\'lmadi',
+      aiAnalysisTitle: '🧠 AI-tahlil', aiAnalysisRun: 'Tahlil qilish', aiAnalysisRefresh: 'Yangilash',
+      aiAnalysisLoading: 'AI moliyangizni o\'rganmoqda...',
+      aiAnalysisIntro: 'Tanlangan davr uchun AI-tahlilni olish uchun tugmani bosing.',
+      aiAnalysisFailed: 'Tahlilni olib bo\'lmadi. API kalitni va internetni tekshiring.',
+      aiAnalysisNoData: 'Tanlangan davr uchun tahlil uchun ma\'lumot yetarli emas. Bir nechta operatsiya qo\'shing.',
+      aiSectionMain: '🔍 Nima payqadim', aiSectionTrends: '📊 Tendensiyalar', aiSectionAdvice: '💡 Maslahat',
+      assistant: 'Assistent', chatTitle: '🤖 Moliyaviy assistent',
+      chatPlaceholder: 'Soliqlar, hisob, moliya haqida so\'rang...',
+      chatSend: 'Yuborish', chatClear: 'Suhbatni tozalash', chatConfirmClear: 'Barcha yozishmalarni tozalaysizmi?',
+      chatEmpty: 'Soliqlar, buxgalteriya, moliya yoki xarajatlaringiz haqida savol bering.',
+      chatLoading: 'Assistent o\'ylayapti...',
+      chatUseFinDataLabel: 'Javobda moliyaviy ma\'lumotlarimni hisobga olish',
+      chatDisclaimer: 'Bu AI javoblari. Muhim yuridik qarorlar uchun yurist yoki buxgalter bilan maslahatlashing.',
+      chatSuggestions: 'Masalan:',
+      chatExample1: 'Ish haqidan NDFLni qanday hisoblash?',
+      chatExample2: 'IPP uchun yagona soliq to\'lovi nima?',
+      chatExample3: 'O\'zbekistonda samozanyat sifatida qanday ro\'yxatdan o\'tish?',
+      chatExample4: 'Qayerga ko\'proq pul sarflamoqdaman?'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -158,7 +203,25 @@ const App = () => {
       shareReport: 'Share report', shareTitle: 'Wallet — Report',
       shareText: 'Expense and income report',
       shareNotSupported: '✓ File saved to Downloads folder. To send via messenger: open "My Files" app → "Downloads" → long press wallet-report → "Share" → choose your app.',
-      shareError: 'Could not send file'
+      shareError: 'Could not send file',
+      aiAnalysisTitle: '🧠 AI analysis', aiAnalysisRun: 'Analyze', aiAnalysisRefresh: 'Refresh',
+      aiAnalysisLoading: 'AI is studying your finances...',
+      aiAnalysisIntro: 'Tap the button to get an AI analysis of your expenses for the selected period.',
+      aiAnalysisFailed: 'Could not get the analysis. Check the API key and internet connection.',
+      aiAnalysisNoData: 'Not enough data for analysis in the selected period. Add a few transactions.',
+      aiSectionMain: '🔍 What I noticed', aiSectionTrends: '📊 Trends', aiSectionAdvice: '💡 Advice',
+      assistant: 'Assistant', chatTitle: '🤖 Financial assistant',
+      chatPlaceholder: 'Ask about taxes, accounting, finances...',
+      chatSend: 'Send', chatClear: 'Clear chat', chatConfirmClear: 'Clear all messages?',
+      chatEmpty: 'Ask about taxes, accounting, finances, or your expenses.',
+      chatLoading: 'Assistant is thinking...',
+      chatUseFinDataLabel: 'Use my financial data in the answer',
+      chatDisclaimer: 'These are AI answers. For legally important decisions, consult a lawyer or accountant.',
+      chatSuggestions: 'For example:',
+      chatExample1: 'How to calculate income tax from salary?',
+      chatExample2: 'What is a unified tax payment for entrepreneurs?',
+      chatExample3: 'How to register as self-employed in Uzbekistan?',
+      chatExample4: 'Where do I spend the most money?'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -198,7 +261,25 @@ const App = () => {
       shareReport: 'Raporu paylaş', shareTitle: 'Wallet — Rapor',
       shareText: 'Gelir ve gider raporu',
       shareNotSupported: '✓ Dosya "İndirilenler" klasörüne kaydedildi. Mesajlaşma uygulamasına göndermek için: "Dosyalarım" uygulamasını açın → "İndirilenler" → wallet-report dosyasına uzun basın → "Paylaş" → uygulamayı seçin.',
-      shareError: 'Dosya gönderilemedi'
+      shareError: 'Dosya gönderilemedi',
+      aiAnalysisTitle: '🧠 AI analizi', aiAnalysisRun: 'Analiz et', aiAnalysisRefresh: 'Yenile',
+      aiAnalysisLoading: 'AI finansınızı inceliyor...',
+      aiAnalysisIntro: 'Seçilen dönem için AI analizini almak için düğmeye dokunun.',
+      aiAnalysisFailed: 'Analiz alınamadı. API anahtarını ve internet bağlantısını kontrol edin.',
+      aiAnalysisNoData: 'Seçilen dönemde analiz için yeterli veri yok. Birkaç işlem ekleyin.',
+      aiSectionMain: '🔍 Fark ettiklerim', aiSectionTrends: '📊 Trendler', aiSectionAdvice: '💡 Tavsiye',
+      assistant: 'Asistan', chatTitle: '🤖 Finansal asistan',
+      chatPlaceholder: 'Vergiler, muhasebe, finans hakkında sorun...',
+      chatSend: 'Gönder', chatClear: 'Sohbeti temizle', chatConfirmClear: 'Tüm mesajları temizlensin mi?',
+      chatEmpty: 'Vergiler, muhasebe, finans veya harcamalarınız hakkında soru sorun.',
+      chatLoading: 'Asistan düşünüyor...',
+      chatUseFinDataLabel: 'Cevapta finansal verilerimi kullan',
+      chatDisclaimer: 'Bunlar AI cevaplarıdır. Yasal olarak önemli kararlar için avukat veya muhasebeciye danışın.',
+      chatSuggestions: 'Örneğin:',
+      chatExample1: 'Maaştan gelir vergisi nasıl hesaplanır?',
+      chatExample2: 'Girişimciler için birleşik vergi ödemesi nedir?',
+      chatExample3: 'Özbekistan\'da serbest çalışan olarak nasıl kayıt olurum?',
+      chatExample4: 'Nereye en çok para harcıyorum?'
     }
   };
 
@@ -219,6 +300,21 @@ const App = () => {
     }
     const key = localStorage.getItem('walletGeminiKey');
     if (key) { setGeminiKey(key); setTempKey(key); }
+    const savedAi = localStorage.getItem('walletAiAnalysis');
+    if (savedAi) {
+      try {
+        const parsed = JSON.parse(savedAi);
+        setAiAnalysis(parsed.analysis);
+        setAiAnalysisPeriod(parsed.period);
+      } catch (e) {}
+    }
+    const savedChat = localStorage.getItem('walletChat');
+    if (savedChat) {
+      try {
+        const parsed = JSON.parse(savedChat);
+        if (Array.isArray(parsed)) setChatMessages(parsed);
+      } catch (e) {}
+    }
   }, []);
 
   useEffect(() => {
@@ -724,6 +820,222 @@ const App = () => {
     }
   };
 
+  // ===== AI-ЧАТ =====
+  const sendChatMessage = async (text) => {
+    const messageText = (text ?? chatInput).trim();
+    if (!messageText || chatLoading) return;
+    if (!geminiKey) {
+      setShowSettings(true);
+      alert(t.noKeyError);
+      return;
+    }
+    const userMsg = { role: 'user', content: messageText, timestamp: Date.now() };
+    const newMessages = [...chatMessages, userMsg];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const langNames = { ru: 'русский', uz: "o'zbek (latin)", en: 'English', tr: 'Türkçe' };
+      const systemInstruction = `Ты финансовый и налоговый помощник в мобильном приложении Wallet для пользователей из Узбекистана.
+
+Твоя специализация:
+1. Налоговое законодательство Узбекистана (НК РУз): НДФЛ, налог на прибыль, НДС, ЕНП, единый налоговый платёж для ИП, самозанятость, БРВ
+2. Бухгалтерский учёт (НСБУ, ПБУ, МСФО): основные средства, амортизация, отчётность в ГНК
+3. Трудовое законодательство (ТК РУз): увольнения, отпуска, компенсации, оформление сотрудников
+4. Банковская сфера Узбекистана: валютные операции, эквайринг, депозиты, кредиты, лимиты
+5. Личные финансы: бюджетирование, инвестиции, сбережения, финансовое планирование
+6. Валютные операции и курсы ЦБ РУз
+
+Правила ответов:
+- Отвечай кратко и по делу (2-4 абзаца обычно достаточно)
+- Используй актуальные ставки, лимиты, размер БРВ (Базовая расчётная величина) когда это релевантно
+- Ссылайся на конкретные статьи НК РУз, ТК РУз, ГК РУз когда возможно
+- Если не уверен в конкретной норме или ставке — так и говори, лучше сказать "уточните в ГНК" чем выдумать
+- В сложных или пограничных вопросах рекомендуй обратиться к юристу или бухгалтеру
+- Не давай юридически обязывающих советов
+- Пиши на языке: ${langNames[language]}
+- Не используй markdown разметку (никаких **жирный** и *списков*), пиши как обычный текст с переносами строк
+
+Стиль: как опытный коллега-финансист, дружелюбно, структурированно, без лишней воды.`;
+
+      let finalSystem = systemInstruction;
+      if (chatUseFinData && transactions.length > 0) {
+        const catExpense = {};
+        const catIncome = {};
+        const recent = transactions.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 100);
+        recent.forEach(tx => {
+          const bucket = tx.type === 'income' ? catIncome : catExpense;
+          const key = tx.category + ' (' + tx.currency + ')';
+          bucket[key] = (bucket[key] || 0) + tx.amount;
+        });
+        const summary = `\n\nФинансовые данные пользователя (последние 100 операций):
+- Всего операций: ${recent.length}
+- Валюты: ${[...new Set(recent.map(t => t.currency))].join(', ')}
+- Текущая выбранная валюта: ${currency}
+
+Доходы по категориям:
+${Object.entries(catIncome).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString()).join('\n') || '(нет)'}
+
+Расходы по категориям:
+${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString()).join('\n') || '(нет)'}`;
+        finalSystem += summary;
+      }
+
+      // Ограничиваем контекст последними 12 сообщениями чтобы не разрастался
+      const historyForApi = newMessages.slice(-12).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+      }));
+
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: finalSystem }] },
+            contents: historyForApi,
+            generationConfig: { temperature: 0.5 }
+          })
+        }
+      );
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!raw) throw new Error('Empty response');
+      const aiMsg = { role: 'model', content: raw.trim(), timestamp: Date.now() };
+      const finalMessages = [...newMessages, aiMsg];
+      setChatMessages(finalMessages);
+      try { localStorage.setItem('walletChat', JSON.stringify(finalMessages.slice(-40))); } catch (e) {}
+    } catch (err) {
+      console.error('Chat error', err);
+      const errorMsg = { role: 'model', content: '⚠️ ' + (err.message || 'Ошибка соединения') + '. Попробуй ещё раз.', timestamp: Date.now(), isError: true };
+      setChatMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const clearChat = () => {
+    if (chatMessages.length === 0) return;
+    if (window.confirm(t.chatConfirmClear)) {
+      setChatMessages([]);
+      try { localStorage.removeItem('walletChat'); } catch (e) {}
+    }
+  };
+
+  // Автоскролл к последнему сообщению
+  useEffect(() => {
+    if (chatEndRef.current && activeTab === 'assistant') {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [chatMessages, chatLoading, activeTab]);
+
+  // ===== AI-АНАЛИЗ МЕСЯЦА =====
+  const runAiAnalysis = async () => {
+    if (!geminiKey) {
+      setAiAnalysisError(t.noKeyError);
+      setShowSettings(true);
+      setTimeout(() => setAiAnalysisError(''), 5000);
+      return;
+    }
+    if (periodTransactions.length < 3) {
+      setAiAnalysisError(t.aiAnalysisNoData);
+      setTimeout(() => setAiAnalysisError(''), 5000);
+      return;
+    }
+    setAiAnalysisLoading(true);
+    setAiAnalysisError('');
+    try {
+      // Собираем данные текущего периода
+      const catIncome = {};
+      const catExpense = {};
+      periodTransactions.forEach(tx => {
+        const bucket = tx.type === 'income' ? catIncome : catExpense;
+        if (!bucket[tx.category]) bucket[tx.category] = { total: 0, count: 0, top: 0 };
+        bucket[tx.category].total += tx.amount;
+        bucket[tx.category].count += 1;
+        if (tx.amount > bucket[tx.category].top) bucket[tx.category].top = tx.amount;
+      });
+      const fmtCat = (obj) => Object.entries(obj)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([name, v]) => `- ${name}: ${v.total.toLocaleString()} ${currency} (${v.count} операций, крупнейшая ${v.top.toLocaleString()})`)
+        .join('\n');
+      // Прошлые периоды для сравнения (последние 3 месяца)
+      const now = new Date();
+      const monthsData = [];
+      for (let i = 1; i <= 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        const totals = monthlySummary[key];
+        if (totals && (totals.income > 0 || totals.expense > 0)) {
+          monthsData.push(`- ${formatMonthLabel(key + '-01')}: доход ${totals.income.toLocaleString()}, расход ${totals.expense.toLocaleString()}`);
+        }
+      }
+      const langNames = { ru: 'русский', uz: "o'zbek (latin)", en: 'English', tr: 'Türkçe' };
+      const prompt = `Ты финансовый советник в мобильном приложении Wallet. Проанализируй траты пользователя из Узбекистана.
+
+Валюта отчёта: ${currency}
+Период: ${periodLabel}
+Всего операций: ${periodTransactions.length}
+Общий доход: ${income.toLocaleString()} ${currency}
+Общий расход: ${expense.toLocaleString()} ${currency}
+Сальдо: ${balance.toLocaleString()} ${currency}
+
+Расходы по категориям за период:
+${fmtCat(catExpense) || '(нет расходов)'}
+
+Доходы по категориям за период:
+${fmtCat(catIncome) || '(нет доходов)'}
+
+Данные за прошлые месяцы для сравнения:
+${monthsData.join('\n') || '(нет исторических данных)'}
+
+Верни СТРОГО JSON без markdown в формате:
+{
+  "main": "2-3 предложения о том что заметил в тратах (топ-статья, необычное распределение и т.п.)",
+  "trends": "2-3 предложения о трендах и сравнении с прошлыми периодами (если есть данные). Если данных мало — оцени текущий период без сравнений.",
+  "advice": "1-2 конкретных практических совета исходя из паттернов расходов. Не общие фразы про 'экономь больше' — а конкретика по данным пользователя."
+}
+
+Стиль: дружелюбно-деловой, без нравоучений и общих фраз. Пиши как опытный финансист-друг. Язык ответа: ${langNames[language]}.`;
+
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.4
+            }
+          })
+        }
+      );
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!raw) throw new Error('Empty response');
+      let jsonText = String(raw).trim();
+      if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+      const parsed = JSON.parse(jsonText);
+      if (!parsed.main && !parsed.trends && !parsed.advice) throw new Error('No content');
+      setAiAnalysis(parsed);
+      setAiAnalysisPeriod(dashboardPeriod + '|' + periodLabel);
+      try {
+        localStorage.setItem('walletAiAnalysis', JSON.stringify({ analysis: parsed, period: dashboardPeriod + '|' + periodLabel }));
+      } catch (e) {}
+    } catch (err) {
+      console.error('AI analysis error', err);
+      setAiAnalysisError(t.aiAnalysisFailed);
+      setTimeout(() => setAiAnalysisError(''), 5000);
+    } finally {
+      setAiAnalysisLoading(false);
+    }
+  };
+
   const saveGeminiKey = () => {
     const val = tempKey.trim();
     setGeminiKey(val);
@@ -930,6 +1242,7 @@ const App = () => {
         <div style={{ display: 'flex', gap: '4px', backgroundColor: c.card, padding: '4px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
           <button onClick={() => setActiveTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
           <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
+          <button onClick={() => setActiveTab('assistant')} style={tabStyle(activeTab === 'assistant')}>{t.assistant}</button>
         </div>
 
         {activeTab === 'dashboard' && (
@@ -1218,6 +1531,56 @@ const App = () => {
               </div>
             )}
 
+            <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <h3 style={{ margin: 0, fontSize: '15px' }}>{t.aiAnalysisTitle}</h3>
+                {periodTransactions.length >= 3 && (
+                  <button
+                    onClick={runAiAnalysis}
+                    disabled={aiAnalysisLoading}
+                    style={{ padding: '7px 14px', fontSize: '12px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.saveBtn, color: '#fff', cursor: aiAnalysisLoading ? 'wait' : 'pointer', fontWeight: 500, opacity: aiAnalysisLoading ? 0.7 : 1 }}
+                  >
+                    {aiAnalysisLoading ? '⏳ ' + t.aiAnalysisLoading : (aiAnalysis ? t.aiAnalysisRefresh : t.aiAnalysisRun)}
+                  </button>
+                )}
+              </div>
+
+              {aiAnalysisError && (
+                <div style={{ backgroundColor: '#8B4548', color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
+                  {aiAnalysisError}
+                </div>
+              )}
+
+              {aiAnalysis && !aiAnalysisLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {aiAnalysis.main && (
+                    <div style={{ backgroundColor: c.saveBtn + '18', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid ' + c.saveBtn }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: c.saveBtn, marginBottom: '5px', letterSpacing: '0.3px' }}>{t.aiSectionMain}</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.55', color: c.text }}>{aiAnalysis.main}</div>
+                    </div>
+                  )}
+                  {aiAnalysis.trends && (
+                    <div style={{ backgroundColor: c.incomeColor + '18', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid ' + c.incomeColor }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: c.incomeColor, marginBottom: '5px', letterSpacing: '0.3px' }}>{t.aiSectionTrends}</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.55', color: c.text }}>{aiAnalysis.trends}</div>
+                    </div>
+                  )}
+                  {aiAnalysis.advice && (
+                    <div style={{ backgroundColor: c.expenseColor + '18', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid ' + c.expenseColor }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: c.expenseColor, marginBottom: '5px', letterSpacing: '0.3px' }}>{t.aiSectionAdvice}</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.55', color: c.text }}>{aiAnalysis.advice}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!aiAnalysis && !aiAnalysisLoading && !aiAnalysisError && (
+                <div style={{ fontSize: '13px', color: c.sec, lineHeight: '1.55', padding: '4px 0' }}>
+                  {periodTransactions.length < 3 ? t.aiAnalysisNoData : t.aiAnalysisIntro}
+                </div>
+              )}
+            </div>
+
             <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', border: '1px solid ' + c.border }}>
               <h3 style={{ margin: '0 0 14px 0', fontSize: '15px' }}>{t.recent}</h3>
               {transactions.length === 0 ? (
@@ -1458,6 +1821,103 @@ const App = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'assistant' && (
+          <div>
+            <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px' }}>{t.chatTitle}</h3>
+              {chatMessages.length > 0 && (
+                <button onClick={clearChat} style={{ padding: '6px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.chatClear}</button>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minHeight: '320px', maxHeight: '55vh', overflowY: 'auto', marginBottom: '12px' }}>
+              {chatMessages.length === 0 ? (
+                <div>
+                  <div style={{ color: c.sec, fontSize: '13px', lineHeight: '1.55', textAlign: 'center', padding: '20px 10px 24px' }}>{t.chatEmpty}</div>
+                  <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', textAlign: 'center' }}>{t.chatSuggestions}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '360px', margin: '0 auto' }}>
+                    {[t.chatExample1, t.chatExample2, t.chatExample3, t.chatExample4].map((ex, i) => (
+                      <button
+                        key={i}
+                        onClick={() => sendChatMessage(ex)}
+                        style={{ padding: '10px 12px', fontSize: '12px', backgroundColor: c.saveBtn + '15', color: c.text, border: '1px solid ' + c.saveBtn + '40', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', lineHeight: '1.4' }}
+                      >
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {chatMessages.map((m, i) => {
+                    const isUser = m.role === 'user';
+                    return (
+                      <div key={i} style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: '10px' }}>
+                        <div style={{
+                          maxWidth: '85%',
+                          padding: '10px 13px',
+                          borderRadius: isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                          backgroundColor: isUser ? c.saveBtn : (m.isError ? '#8B4548' + '20' : c.bg),
+                          color: isUser ? '#fff' : c.text,
+                          fontSize: '13px',
+                          lineHeight: '1.55',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          border: isUser ? 'none' : '1px solid ' + c.border
+                        }}>
+                          {m.content}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {chatLoading && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '10px' }}>
+                      <div style={{ padding: '10px 13px', borderRadius: '12px 12px 12px 4px', backgroundColor: c.bg, color: c.sec, fontSize: '13px', border: '1px solid ' + c.border }}>
+                        ⏳ {t.chatLoading}
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: c.card, padding: '12px', borderRadius: '12px', border: '1px solid ' + c.border }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                <textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendChatMessage();
+                    }
+                  }}
+                  placeholder={t.chatPlaceholder}
+                  disabled={chatLoading}
+                  rows={2}
+                  style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, fontSize: '13px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+                <button
+                  onClick={() => sendChatMessage()}
+                  disabled={chatLoading || !chatInput.trim()}
+                  style={{ padding: '10px 14px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: (chatLoading || !chatInput.trim()) ? 'default' : 'pointer', fontWeight: 500, fontSize: '13px', opacity: (chatLoading || !chatInput.trim()) ? 0.5 : 1, whiteSpace: 'nowrap' }}
+                >
+                  {t.chatSend}
+                </button>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', fontSize: '12px', color: c.sec, cursor: 'pointer' }}>
+                <input type="checkbox" checked={chatUseFinData} onChange={(e) => setChatUseFinData(e.target.checked)} style={{ cursor: 'pointer' }} />
+                <span>{t.chatUseFinDataLabel}</span>
+              </label>
+            </div>
+
+            <div style={{ marginTop: '10px', fontSize: '11px', color: c.sec, textAlign: 'center', lineHeight: '1.5', padding: '0 10px' }}>
+              {t.chatDisclaimer}
             </div>
           </div>
         )}
