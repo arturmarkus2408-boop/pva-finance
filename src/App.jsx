@@ -646,10 +646,10 @@ const App = () => {
 {"amount": число_без_разделителей, "date": "YYYY-MM-DD" или null, "currency": "UZS"|"USD"|"EUR"|"RUB" или null, "description": "..." или null, "category": "..." или null}`;
 
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
           body: JSON.stringify({
             contents: [{ parts: [
               { inline_data: { mime_type: 'image/jpeg', data: base64 } },
@@ -767,10 +767,10 @@ const App = () => {
 Фраза: "${text.replace(/"/g, '\\"')}"`;
 
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
@@ -888,10 +888,10 @@ ${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString(
       }));
 
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: finalSystem }] },
             contents: historyForApi,
@@ -1001,10 +1001,10 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 Стиль: дружелюбно-деловой, без нравоучений и общих фраз. Пиши как опытный финансист-друг. Язык ответа: ${langNames[language]}.`;
 
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(geminiKey),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
