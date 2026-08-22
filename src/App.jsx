@@ -27,6 +27,10 @@ const App = () => {
   });
   const [geminiKey, setGeminiKey] = useState('');
   const [tempKey, setTempKey] = useState('');
+  const [groqKey, setGroqKey] = useState('');
+  const [tempGroqKey, setTempGroqKey] = useState('');
+  const [orKey, setOrKey] = useState('');
+  const [tempOrKey, setTempOrKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
@@ -77,6 +81,12 @@ const App = () => {
       apiKeyLabel: 'API-ключ Gemini', apiKeyPlaceholder: 'AIzaSy...',
       apiKeyHint: 'Ключ нужен для распознавания чеков. Хранится только на вашем устройстве.',
       getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
+      groqKeyLabel: 'API-ключ Groq (резервный, необязательно)', groqKeyPlaceholder: 'gsk_...',
+      groqKeyHint: 'Подключается автоматически, если Gemini недоступен (голос, AI-анализ, чат). Для фото чеков не используется.',
+      getGroqKey: 'Как получить ключ Groq',
+      orKeyLabel: 'API-ключ OpenRouter (резервный 2, необязательно)', orKeyPlaceholder: 'sk-or-...',
+      orKeyHint: 'Третий уровень защиты — подключается, если недоступны и Gemini, и Groq.',
+      getOrKey: 'Как получить ключ OpenRouter',
       scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
       scanFailedAuth: 'Ключ API отклонён Google. Обновите ключ в ⚙️ Настройках.',
       scanFailedNetwork: 'Нет соединения с сервером. Проверьте интернет.',
@@ -137,6 +147,12 @@ const App = () => {
       apiKeyLabel: 'Gemini API kaliti', apiKeyPlaceholder: 'AIzaSy...',
       apiKeyHint: 'Chekni aniqlash uchun kalit kerak. Faqat qurilmangizda saqlanadi.',
       getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
+      groqKeyLabel: 'Groq API kaliti (zaxira, ixtiyoriy)', groqKeyPlaceholder: 'gsk_...',
+      groqKeyHint: 'Gemini mavjud bo\'lmasa avtomatik ishga tushadi (ovoz, AI-tahlil, chat). Chek suratlari uchun ishlatilmaydi.',
+      getGroqKey: 'Groq kalitni qanday olish',
+      orKeyLabel: 'OpenRouter API kaliti (2-zaxira, ixtiyoriy)', orKeyPlaceholder: 'sk-or-...',
+      orKeyHint: 'Uchinchi himoya darajasi — Gemini va Groq ikkalasi ham mavjud bo\'lmasa ishga tushadi.',
+      getOrKey: 'OpenRouter kalitni qanday olish',
       scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
       scanFailedAuth: 'API kalit Google tomonidan rad etildi. ⚙️ Sozlamalarda kalitni yangilang.',
       scanFailedNetwork: 'Server bilan aloqa yo\'q. Internetni tekshiring.',
@@ -197,6 +213,12 @@ const App = () => {
       apiKeyLabel: 'Gemini API key', apiKeyPlaceholder: 'AIzaSy...',
       apiKeyHint: 'Key is used to recognize receipts. Stored only on your device.',
       getKey: 'How to get a key', keySaved: 'Key saved',
+      groqKeyLabel: 'Groq API key (backup, optional)', groqKeyPlaceholder: 'gsk_...',
+      groqKeyHint: 'Kicks in automatically if Gemini is unavailable (voice, AI analysis, chat). Not used for receipt photos.',
+      getGroqKey: 'How to get a Groq key',
+      orKeyLabel: 'OpenRouter API key (2nd backup, optional)', orKeyPlaceholder: 'sk-or-...',
+      orKeyHint: 'Third layer of protection — kicks in if both Gemini and Groq are unavailable.',
+      getOrKey: 'How to get an OpenRouter key',
       scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
       scanFailedAuth: 'API key rejected by Google. Update the key in ⚙️ Settings.',
       scanFailedNetwork: 'No connection to server. Check your internet.',
@@ -257,6 +279,12 @@ const App = () => {
       apiKeyLabel: 'Gemini API anahtarı', apiKeyPlaceholder: 'AIzaSy...',
       apiKeyHint: 'Anahtar, fişleri tanımak için gereklidir. Yalnızca cihazınızda saklanır.',
       getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
+      groqKeyLabel: 'Groq API anahtarı (yedek, isteğe bağlı)', groqKeyPlaceholder: 'gsk_...',
+      groqKeyHint: 'Gemini kullanılamazsa otomatik devreye girer (ses, AI analizi, sohbet). Fiş fotoğrafları için kullanılmaz.',
+      getGroqKey: 'Groq anahtarı nasıl alınır',
+      orKeyLabel: 'OpenRouter API anahtarı (2. yedek, isteğe bağlı)', orKeyPlaceholder: 'sk-or-...',
+      orKeyHint: 'Üçüncü koruma katmanı — hem Gemini hem Groq kullanılamazsa devreye girer.',
+      getOrKey: 'OpenRouter anahtarı nasıl alınır',
       scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
       scanFailedAuth: 'API anahtarı Google tarafından reddedildi. ⚙️ Ayarlar\'dan anahtarı güncelleyin.',
       scanFailedNetwork: 'Sunucuyla bağlantı yok. İnternetinizi kontrol edin.',
@@ -308,6 +336,10 @@ const App = () => {
     }
     const key = localStorage.getItem('walletGeminiKey');
     if (key) { setGeminiKey(key); setTempKey(key); }
+    const gKey = localStorage.getItem('walletGroqKey');
+    if (gKey) { setGroqKey(gKey); setTempGroqKey(gKey); }
+    const orK = localStorage.getItem('walletOrKey');
+    if (orK) { setOrKey(orK); setTempOrKey(orK); }
     const savedAi = localStorage.getItem('walletAiAnalysis');
     if (savedAi) {
       try {
@@ -566,6 +598,132 @@ const App = () => {
   const reportIncome = reportData.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const reportExpense = reportData.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
 
+  // ===== МНОГОУРОВНЕВАЯ ЗАЩИТА ОТ ОТКЛЮЧЕНИЯ МОДЕЛЕЙ GOOGLE =====
+  // Google периодически отключает старые версии Gemini без долгого предупреждения.
+  // Пробуем по очереди несколько моделей; если Google отключит одну — тихо переходим к следующей.
+  const GEMINI_MODEL_CHAIN = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash'];
+
+  // Универсальный вызов Gemini с перебором моделей. requestBody — тело запроса (contents, generationConfig и т.п.)
+  // Возвращает текст ответа модели или бросает ошибку с деталями последней неудачной попытки.
+  const callGeminiChain = async (requestBody) => {
+    let lastErrorDetail = '';
+    for (const model of GEMINI_MODEL_CHAIN) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+            body: JSON.stringify(requestBody)
+          }
+        );
+        if (!response.ok) {
+          let detail = 'HTTP ' + response.status;
+          try {
+            const errData = await response.json();
+            if (errData?.error?.message) detail = errData.error.message;
+          } catch (e) {}
+          lastErrorDetail = `[${model}] ${detail}`;
+          // 404/503 — модель недоступна, пробуем следующую. Другие ошибки (напр. неверный ключ) — тоже пробуем следующую на всякий случай.
+          continue;
+        }
+        const data = await response.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!raw) { lastErrorDetail = `[${model}] empty-response`; continue; }
+        return raw;
+      } catch (err) {
+        lastErrorDetail = `[${model}] ${err?.message || 'network-error'}`;
+        continue;
+      }
+    }
+    throw new Error('gemini-chain-failed: ' + lastErrorDetail);
+  };
+
+  // Резервный текстовый провайдер — Groq (не поддерживает изображения, только текст).
+  // Используется только если ВСЕ модели Gemini недоступны.
+  const callGroqText = async (systemPrompt, userText, expectJson) => {
+    if (!groqKey) throw new Error('no-groq-key');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText }
+        ],
+        temperature: 0.3,
+        ...(expectJson ? { response_format: { type: 'json_object' } } : {})
+      })
+    });
+    if (!response.ok) {
+      let detail = 'HTTP ' + response.status;
+      try {
+        const errData = await response.json();
+        if (errData?.error?.message) detail = errData.error.message;
+      } catch (e) {}
+      throw new Error('groq: ' + detail);
+    }
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('groq: empty-response');
+    return raw;
+  };
+
+  // Резервный текстовый провайдер уровня 3 — OpenRouter (бесплатная Llama 3.3), только текст.
+  const callOpenRouterText = async (systemPrompt, userText, expectJson) => {
+    if (!orKey) throw new Error('no-or-key');
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + orKey,
+        'HTTP-Referer': 'https://pva-finance.vercel.app/',
+        'X-Title': 'Wallet'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText }
+        ],
+        temperature: 0.3,
+        ...(expectJson ? { response_format: { type: 'json_object' } } : {})
+      })
+    });
+    if (!response.ok) {
+      let detail = 'HTTP ' + response.status;
+      try {
+        const errData = await response.json();
+        if (errData?.error?.message) detail = errData.error.message;
+      } catch (e) {}
+      throw new Error('openrouter: ' + detail);
+    }
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('openrouter: empty-response');
+    return raw;
+  };
+
+  // Единая точка входа для текстовых задач: пробует Gemini (цепочка моделей) → Groq → OpenRouter по очереди.
+  // geminiRequestBody — тело запроса к Gemini. systemPrompt/userText — та же задача в формате OpenAI-совместимых сообщений (для Groq/OpenRouter).
+  const callTextWithFallback = async (geminiRequestBody, systemPrompt, userText, expectJson) => {
+    try {
+      return await callGeminiChain(geminiRequestBody);
+    } catch (geminiErr) {
+      if (groqKey) {
+        try {
+          return await callGroqText(systemPrompt, userText, expectJson);
+        } catch (groqErr) {
+          if (orKey) return await callOpenRouterText(systemPrompt, userText, expectJson);
+          throw groqErr;
+        }
+      }
+      if (orKey) return await callOpenRouterText(systemPrompt, userText, expectJson);
+      throw geminiErr;
+    }
+  };
+
   // ===== СЖАТИЕ ФОТО ПЕРЕД ОТПРАВКОЙ В GEMINI =====
   const compressImage = (file, maxSide = 2000, quality = 0.92) => new Promise((resolve, reject) => {
     const img = new Image();
@@ -653,35 +811,17 @@ const App = () => {
 Верни СТРОГО JSON без markdown:
 {"amount": число_без_разделителей, "date": "YYYY-MM-DD" или null, "currency": "UZS"|"USD"|"EUR"|"RUB" или null, "description": "..." или null, "category": "..." или null}`;
 
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-          body: JSON.stringify({
-            contents: [{ parts: [
-              { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-              { text: prompt }
-            ]}],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.1,
-              thinkingConfig: { thinkingBudget: 2048 }
-            }
-          })
+      const raw = await callGeminiChain({
+        contents: [{ parts: [
+          { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+          { text: prompt }
+        ]}],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+          thinkingConfig: { thinkingBudget: 2048 }
         }
-      );
-      if (!response.ok) {
-        let detail = 'HTTP ' + response.status;
-        try {
-          const errData = await response.json();
-          if (errData?.error?.message) detail = errData.error.message;
-        } catch (e) {}
-        throw new Error(detail);
-      }
-      const data = await response.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('empty-response');
+      });
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
@@ -786,28 +926,15 @@ const App = () => {
 Сегодняшняя дата: ${today}
 Фраза: "${text.replace(/"/g, '\\"')}"`;
 
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      const raw = await callTextWithFallback(
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-          })
-        }
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+        },
+        'Ты парсер фраз финансового приложения. Отвечай строго в формате JSON без markdown.',
+        prompt,
+        true
       );
-      if (!response.ok) {
-        let detail = 'HTTP ' + response.status;
-        try {
-          const errData = await response.json();
-          if (errData?.error?.message) detail = errData.error.message;
-        } catch (e) {}
-        throw new Error(detail);
-      }
-      const data = await response.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('empty-response');
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
@@ -918,29 +1045,61 @@ ${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString(
         parts: [{ text: m.content }]
       }));
 
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: finalSystem }] },
-            contents: historyForApi,
-            generationConfig: { temperature: 0.5 }
-          })
+      let raw;
+      try {
+        raw = await callGeminiChain({
+          systemInstruction: { parts: [{ text: finalSystem }] },
+          contents: historyForApi,
+          generationConfig: { temperature: 0.5 }
+        });
+      } catch (geminiErr) {
+        // Groq и OpenRouter используют одинаковый (OpenAI-совместимый) формат сообщений
+        const openAiMessages = newMessages.slice(-12).map(m => ({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.content
+        }));
+        const tryOpenAiCompatible = async (url, key, model, extraHeaders) => {
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key, ...(extraHeaders || {}) },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: 'system', content: finalSystem }, ...openAiMessages],
+              temperature: 0.5
+            })
+          });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const respData = await resp.json();
+          const text = respData?.choices?.[0]?.message?.content;
+          if (!text) throw new Error('empty-response');
+          return text;
+        };
+        if (groqKey) {
+          try {
+            raw = await tryOpenAiCompatible('https://api.groq.com/openai/v1/chat/completions', groqKey, 'llama-3.3-70b-versatile');
+          } catch (groqErr) {
+            if (orKey) {
+              raw = await tryOpenAiCompatible(
+                'https://openrouter.ai/api/v1/chat/completions',
+                orKey,
+                'meta-llama/llama-3.3-70b-instruct:free',
+                { 'HTTP-Referer': 'https://pva-finance.vercel.app/', 'X-Title': 'Wallet' }
+              );
+            } else {
+              throw geminiErr;
+            }
+          }
+        } else if (orKey) {
+          raw = await tryOpenAiCompatible(
+            'https://openrouter.ai/api/v1/chat/completions',
+            orKey,
+            'meta-llama/llama-3.3-70b-instruct:free',
+            { 'HTTP-Referer': 'https://pva-finance.vercel.app/', 'X-Title': 'Wallet' }
+          );
+        } else {
+          throw geminiErr;
         }
-      );
-      if (!response.ok) {
-        let detail = 'HTTP ' + response.status;
-        try {
-          const errData = await response.json();
-          if (errData?.error?.message) detail = errData.error.message;
-        } catch (e) {}
-        throw new Error(detail);
       }
-      const data = await response.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('Пустой ответ от AI');
       const aiMsg = { role: 'model', content: raw.trim(), timestamp: Date.now() };
       const finalMessages = [...newMessages, aiMsg];
       setChatMessages(finalMessages);
@@ -1038,31 +1197,18 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
 Стиль: дружелюбно-деловой, без нравоучений и общих фраз. Пиши как опытный финансист-друг. Язык ответа: ${langNames[language]}.`;
 
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      const raw = await callTextWithFallback(
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.4
-            }
-          })
-        }
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.4
+          }
+        },
+        'Ты финансовый советник. Отвечай строго в формате JSON без markdown.',
+        prompt,
+        true
       );
-      if (!response.ok) {
-        let detail = 'HTTP ' + response.status;
-        try {
-          const errData = await response.json();
-          if (errData?.error?.message) detail = errData.error.message;
-        } catch (e) {}
-        throw new Error(detail);
-      }
-      const data = await response.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('empty-response');
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
@@ -1090,6 +1236,14 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     setGeminiKey(val);
     if (val) localStorage.setItem('walletGeminiKey', val);
     else localStorage.removeItem('walletGeminiKey');
+    const groqVal = tempGroqKey.trim();
+    setGroqKey(groqVal);
+    if (groqVal) localStorage.setItem('walletGroqKey', groqVal);
+    else localStorage.removeItem('walletGroqKey');
+    const orVal = tempOrKey.trim();
+    setOrKey(orVal);
+    if (orVal) localStorage.setItem('walletOrKey', orVal);
+    else localStorage.removeItem('walletOrKey');
     setShowSettings(false);
     setScanError('');
     setScanNotice(t.keySaved);
@@ -1261,7 +1415,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
               <option value="__add__">{t.addCurrency}</option>
             </select>
-            <button onClick={() => { setTempKey(geminiKey); setShowSettings(!showSettings); }} title={t.settings} style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: showSettings ? c.saveBtn : c.card, color: showSettings ? '#fff' : c.text, cursor: 'pointer', fontSize: '13px' }}>⚙️</button>
+            <button onClick={() => { setTempKey(geminiKey); setTempGroqKey(groqKey); setTempOrKey(orKey); setShowSettings(!showSettings); }} title={t.settings} style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: showSettings ? c.saveBtn : c.card, color: showSettings ? '#fff' : c.text, cursor: 'pointer', fontSize: '13px' }}>⚙️</button>
           </div>
         </div>
 
@@ -1273,8 +1427,22 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             </div>
             <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.apiKeyLabel}</label>
             <input type="text" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder={t.apiKeyPlaceholder} style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px' }} autoComplete="off" spellCheck="false" />
-            <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>
+            <div style={{ fontSize: '11px', color: c.sec, marginBottom: '16px', lineHeight: '1.5' }}>
               {t.apiKeyHint} <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: c.saveBtn, textDecoration: 'underline' }}>{t.getKey}</a>
+            </div>
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginBottom: '4px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.groqKeyLabel}</label>
+              <input type="text" value={tempGroqKey} onChange={(e) => setTempGroqKey(e.target.value)} placeholder={t.groqKeyPlaceholder} style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px' }} autoComplete="off" spellCheck="false" />
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>
+                {t.groqKeyHint} <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color: c.saveBtn, textDecoration: 'underline' }}>{t.getGroqKey}</a>
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginBottom: '4px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.orKeyLabel}</label>
+              <input type="text" value={tempOrKey} onChange={(e) => setTempOrKey(e.target.value)} placeholder={t.orKeyPlaceholder} style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px' }} autoComplete="off" spellCheck="false" />
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>
+                {t.orKeyHint} <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: c.saveBtn, textDecoration: 'underline' }}>{t.getOrKey}</a>
+              </div>
             </div>
             <button onClick={saveGeminiKey} style={{ width: '100%', padding: '10px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>{t.saveKey}</button>
           </div>
