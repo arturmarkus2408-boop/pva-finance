@@ -78,6 +78,8 @@ const App = () => {
       apiKeyHint: 'Ключ нужен для распознавания чеков. Хранится только на вашем устройстве.',
       getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
       scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
+      scanFailedAuth: 'Ключ API отклонён Google. Обновите ключ в ⚙️ Настройках.',
+      scanFailedNetwork: 'Нет соединения с сервером. Проверьте интернет.',
       noKeyError: 'Сначала добавьте API-ключ в ⚙️ Настройки', close: 'Закрыть',
       recognized: 'Проверьте данные и сохраните', fromGallery: 'Из галереи',
       voiceInput: '🎤', voiceInputTitle: 'Голосовой ввод', voiceListening: 'Слушаю...',
@@ -136,6 +138,8 @@ const App = () => {
       apiKeyHint: 'Chekni aniqlash uchun kalit kerak. Faqat qurilmangizda saqlanadi.',
       getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
       scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
+      scanFailedAuth: 'API kalit Google tomonidan rad etildi. ⚙️ Sozlamalarda kalitni yangilang.',
+      scanFailedNetwork: 'Server bilan aloqa yo\'q. Internetni tekshiring.',
       noKeyError: 'Avval ⚙️ Sozlamalarga API kalitni qo\'shing', close: 'Yopish',
       recognized: "Ma'lumotlarni tekshirib saqlang", fromGallery: 'Galereyadan',
       voiceInput: '🎤', voiceInputTitle: 'Ovozli kiritish', voiceListening: 'Tinglayapman...',
@@ -194,6 +198,8 @@ const App = () => {
       apiKeyHint: 'Key is used to recognize receipts. Stored only on your device.',
       getKey: 'How to get a key', keySaved: 'Key saved',
       scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
+      scanFailedAuth: 'API key rejected by Google. Update the key in ⚙️ Settings.',
+      scanFailedNetwork: 'No connection to server. Check your internet.',
       noKeyError: 'First add an API key in ⚙️ Settings', close: 'Close',
       recognized: 'Verify data and save', fromGallery: 'From gallery',
       voiceInput: '🎤', voiceInputTitle: 'Voice input', voiceListening: 'Listening...',
@@ -252,6 +258,8 @@ const App = () => {
       apiKeyHint: 'Anahtar, fişleri tanımak için gereklidir. Yalnızca cihazınızda saklanır.',
       getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
       scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
+      scanFailedAuth: 'API anahtarı Google tarafından reddedildi. ⚙️ Ayarlar\'dan anahtarı güncelleyin.',
+      scanFailedNetwork: 'Sunucuyla bağlantı yok. İnternetinizi kontrol edin.',
       noKeyError: 'Önce ⚙️ Ayarlar bölümünden API anahtarı ekleyin', close: 'Kapat',
       recognized: 'Verileri kontrol edip kaydedin', fromGallery: 'Galeriden',
       voiceInput: '🎤', voiceInputTitle: 'Sesli giriş', voiceListening: 'Dinliyorum...',
@@ -663,16 +671,23 @@ const App = () => {
           })
         }
       );
-      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        let detail = 'HTTP ' + response.status;
+        try {
+          const errData = await response.json();
+          if (errData?.error?.message) detail = errData.error.message;
+        } catch (e) {}
+        throw new Error(detail);
+      }
       const data = await response.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('Empty response');
+      if (!raw) throw new Error('empty-response');
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
       const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
       const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
-      if (!amount || isNaN(amount)) throw new Error('No amount');
+      if (!amount || isNaN(amount)) throw new Error('no-amount-found');
       if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
       const langCats = t.categoriesExp;
       let categoryValue = '';
@@ -698,8 +713,13 @@ const App = () => {
       setTimeout(() => setScanNotice(''), 4000);
     } catch (err) {
       console.error('OCR error', err);
-      setScanError(t.scanFailed);
-      setTimeout(() => setScanError(''), 5000);
+      const msg = err?.message || '';
+      let userMsg = t.scanFailed;
+      if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
+      else if (/network|failed to fetch|load failed/i.test(msg)) userMsg = t.scanFailedNetwork;
+      else if (msg === 'no-amount-found') userMsg = t.scanFailed;
+      setScanError(userMsg + (msg ? ' [' + msg.slice(0, 90) + ']' : ''));
+      setTimeout(() => setScanError(''), 8000);
     } finally {
       setScanning(false);
     }
@@ -777,15 +797,22 @@ const App = () => {
           })
         }
       );
-      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        let detail = 'HTTP ' + response.status;
+        try {
+          const errData = await response.json();
+          if (errData?.error?.message) detail = errData.error.message;
+        } catch (e) {}
+        throw new Error(detail);
+      }
       const data = await response.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('Empty response');
+      if (!raw) throw new Error('empty-response');
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
       const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
-      if (!amount || isNaN(amount)) throw new Error('No amount');
+      if (!amount || isNaN(amount)) throw new Error('no-amount-found');
       const txType = parsed.type === 'income' ? 'income' : 'expense';
       const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
       if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
@@ -813,8 +840,12 @@ const App = () => {
       setTimeout(() => setScanNotice(''), 4000);
     } catch (err) {
       console.error('Voice parse error', err);
-      setScanError(t.voiceParseError);
-      setTimeout(() => setScanError(''), 5000);
+      const msg = err?.message || '';
+      let userMsg = t.voiceParseError;
+      if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
+      else if (/network|failed to fetch|load failed/i.test(msg)) userMsg = t.scanFailedNetwork;
+      setScanError(userMsg + (msg ? ' [' + msg.slice(0, 90) + ']' : ''));
+      setTimeout(() => setScanError(''), 8000);
     } finally {
       setScanning(false);
     }
@@ -899,10 +930,17 @@ ${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString(
           })
         }
       );
-      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        let detail = 'HTTP ' + response.status;
+        try {
+          const errData = await response.json();
+          if (errData?.error?.message) detail = errData.error.message;
+        } catch (e) {}
+        throw new Error(detail);
+      }
       const data = await response.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('Empty response');
+      if (!raw) throw new Error('Пустой ответ от AI');
       const aiMsg = { role: 'model', content: raw.trim(), timestamp: Date.now() };
       const finalMessages = [...newMessages, aiMsg];
       setChatMessages(finalMessages);
@@ -1014,14 +1052,21 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
           })
         }
       );
-      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        let detail = 'HTTP ' + response.status;
+        try {
+          const errData = await response.json();
+          if (errData?.error?.message) detail = errData.error.message;
+        } catch (e) {}
+        throw new Error(detail);
+      }
       const data = await response.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) throw new Error('Empty response');
+      if (!raw) throw new Error('empty-response');
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
-      if (!parsed.main && !parsed.trends && !parsed.advice) throw new Error('No content');
+      if (!parsed.main && !parsed.trends && !parsed.advice) throw new Error('no-content');
       setAiAnalysis(parsed);
       setAiAnalysisPeriod(dashboardPeriod + '|' + periodLabel);
       try {
@@ -1029,8 +1074,12 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
       } catch (e) {}
     } catch (err) {
       console.error('AI analysis error', err);
-      setAiAnalysisError(t.aiAnalysisFailed);
-      setTimeout(() => setAiAnalysisError(''), 5000);
+      const msg = err?.message || '';
+      let userMsg = t.aiAnalysisFailed;
+      if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
+      else if (/network|failed to fetch|load failed/i.test(msg)) userMsg = t.scanFailedNetwork;
+      setAiAnalysisError(userMsg + (msg ? ' [' + msg.slice(0, 90) + ']' : ''));
+      setTimeout(() => setAiAnalysisError(''), 8000);
     } finally {
       setAiAnalysisLoading(false);
     }
