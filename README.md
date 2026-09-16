@@ -1,16 +1,66 @@
-# React + Vite
+# Wallet — личный учёт финансов
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PWA для учёта доходов и расходов. Работает офлайн, данные хранятся только на устройстве пользователя.
 
-Currently, two official plugins are available:
+## Возможности
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**Учёт**
+- Доходы и расходы, мультивалютность, свой список валют
+- Пользовательские категории: добавление, переименование, удаление; новая категория заводится прямо из формы операции
+- Метки операций (например «личное» / «по практике») с отдельным фильтром в отчёте
+- Перенос остатка: видно, с каким плюсом или минусом вы вошли в текущий период
+- Сводный баланс всех валют по заданным вручную курсам
 
-## React Compiler
+**Автоматический ввод**
+- Распознавание фото: бумажный чек, список SMS, экран истории банка, квитанция перевода, электронный чек платёжного сервиса
+- Офлайн-разбор текста банковского SMS без интернета и API-ключа
+- Приём через «Поделиться» (Web Share Target): выделили SMS → Поделиться → Wallet
+- Вставка текста SMS прямо в приложение — разбор офлайн, без API-ключа
+- Полностью автоматический приём: телефон пересылает SMS на ваш сервер, приложение забирает их при открытии (см. AUTOMATION.md)
+- Защита от задвоения: сверка по номеру транзакции, карте, времени, остатку и комиссии
+- Реестр своих карт — переводы между ними не считаются расходом
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Контроль**
+- Сверка с банком: приложение само находит не внесённые операции по остаткам из квитанций
+- Месячные лимиты по категориям
+- Регулярные платежи с напоминанием в нужный день месяца
+- Планы и долги: «я должен», «мне должны», запланированные траты; при закрытии заводится операция
+- Поиск по операциям
 
-## Expanding the ESLint configuration
+**Аналитика и экспорт**
+- Графики: круг, столбцы, динамика
+- AI-анализ трат и финансовый чат-ассистент
+- Экспорт в Excel и PDF, отправка отчёта
+- Резервная копия всех данных в JSON с восстановлением
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Запуск
+
+```bash
+npm install
+npm run dev      # разработка
+npm run build    # сборка в dist/
+npm run preview  # просмотр сборки
+```
+
+## API-ключи
+
+Ключи вводятся в самом приложении (⚙️ Настройки) и хранятся только в браузере пользователя.
+В репозиторий и в сборку они не попадают.
+
+- Gemini — распознавание фото, голосовой ввод, AI-анализ, чат
+- Groq — резервный провайдер для текстовых задач
+- OpenRouter — второй резервный провайдер
+
+Разбор текста SMS и все расчёты работают без ключей.
+
+## Автоматический приём SMS
+
+Настройка описана в [AUTOMATION.md](AUTOMATION.md). Без неё приложение работает
+полностью на устройстве; с ней появляется серверная функция `api/inbox.js`,
+которой нужны переменные окружения `UPSTASH_REDIS_REST_URL`,
+`UPSTASH_REDIS_REST_TOKEN` и `WALLET_INBOX_KEY`.
+
+## Данные
+
+Всё хранится в `localStorage` этого браузера. Бэкенда нет, данные никуда не отправляются.
+Очистка данных сайта удалит их безвозвратно — делайте резервную копию в настройках.

@@ -158,7 +158,8 @@ const App = () => {
       chatExample2: 'Что такое единый налоговый платёж для ИП?',
       chatExample3: 'Как оформить самозанятость в Узбекистане?',
       chatExample4: 'Куда я больше всего трачу деньги?',
-      carryLabel: 'Перенос с прошлых периодов',
+      carryLabel: 'Перешло с прошлого периода',
+      carryShort: 'ПЕРЕНОС', withCarryShort: 'ИТОГО С ПЕРЕНОСОМ',
       withCarryLabel: 'Итого с переносом',
       carryHint: 'Остаток на начало периода',
       aiReadyBadge: 'анализ готов',
@@ -351,6 +352,7 @@ const App = () => {
       chatExample3: 'O\'zbekistonda samozanyat sifatida qanday ro\'yxatdan o\'tish?',
       chatExample4: 'Qayerga ko\'proq pul sarflamoqdaman?',
       carryLabel: 'O\'tgan davrlardan qoldiq',
+      carryShort: 'QOLDIQ', withCarryShort: 'QOLDIQ BILAN JAMI',
       withCarryLabel: 'Qoldiq bilan jami',
       carryHint: 'Davr boshidagi qoldiq',
       aiReadyBadge: 'tahlil tayyor',
@@ -543,6 +545,7 @@ const App = () => {
       chatExample3: 'How to register as self-employed in Uzbekistan?',
       chatExample4: 'Where do I spend the most money?',
       carryLabel: 'Carried over from previous periods',
+      carryShort: 'CARRIED OVER', withCarryShort: 'TOTAL WITH CARRY',
       withCarryLabel: 'Total with carry-over',
       carryHint: 'Balance at the start of the period',
       aiReadyBadge: 'analysis ready',
@@ -735,6 +738,7 @@ const App = () => {
       chatExample3: 'Özbekistan\'da serbest çalışan olarak nasıl kayıt olurum?',
       chatExample4: 'Nereye en çok para harcıyorum?',
       carryLabel: 'Önceki dönemlerden devir',
+      carryShort: 'DEVİR', withCarryShort: 'DEVİRLE TOPLAM',
       withCarryLabel: 'Devirle birlikte toplam',
       carryHint: 'Dönem başı bakiye',
       aiReadyBadge: 'analiz hazır',
@@ -928,9 +932,9 @@ const App = () => {
   }, [dashboardPeriod, language, theme, currency, activeTab, showForm, showSettings, listening, scanning]);
 
   const themes = {
-    light: { bg: '#F7F4ED', text: '#1B2845', sec: '#5F5E5A', card: '#FFFFFF', border: '#E0DCD0', incomeColor: '#3F7D58', expenseColor: '#8B4548', saveBtn: '#B07D3F', tabActive: '#1B2845', tabText: '#FFFFFF' },
-    dark: { bg: '#000000', text: '#FFFFFF', sec: '#C9A84C', card: '#111111', border: '#2A2A2A', incomeColor: '#C9A84C', expenseColor: '#E05555', saveBtn: '#C9A84C', tabActive: '#C9A84C', tabText: '#000000' },
-    soft: { bg: '#EEF1F5', text: '#1A2635', sec: '#4A6080', card: '#FFFFFF', border: '#C8D3DE', incomeColor: '#1E5C3A', expenseColor: '#6B2737', saveBtn: '#1E3A5C', tabActive: '#1E3A5C', tabText: '#FFFFFF' }
+    light: { bg: '#F7F4ED', text: '#1B2845', sec: '#5F5E5A', card: '#FFFFFF', border: '#E0DCD0', incomeColor: '#3F7D58', expenseColor: '#8B4548', saveBtn: '#B07D3F', tabActive: '#1B2845', tabText: '#FFFFFF', carryColor: '#7A5528' },
+    dark: { bg: '#000000', text: '#FFFFFF', sec: '#C9A84C', card: '#111111', border: '#2A2A2A', incomeColor: '#C9A84C', expenseColor: '#E05555', saveBtn: '#C9A84C', tabActive: '#C9A84C', tabText: '#000000', carryColor: '#9FC4E0' },
+    soft: { bg: '#EEF1F5', text: '#1A2635', sec: '#4A6080', card: '#FFFFFF', border: '#C8D3DE', incomeColor: '#1E5C3A', expenseColor: '#6B2737', saveBtn: '#1E3A5C', tabActive: '#1E3A5C', tabText: '#FFFFFF', carryColor: '#8A6A3F' }
   };
   const c = themes[theme];
 
@@ -2676,6 +2680,16 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     w.document.close();
   };
 
+  // Крупные числа в карточках: сами уменьшаются на узком экране и переносятся,
+  // вместо того чтобы вылезать за границу карточки
+  const statNumStyle = {
+    fontSize: 'clamp(15px, 5vw, 19px)',
+    fontWeight: 600,
+    marginTop: '4px',
+    overflowWrap: 'anywhere',
+    lineHeight: 1.2
+  };
+
   const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, boxSizing: 'border-box', fontSize: '14px' };
   const chartTabStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: active ? c.saveBtn : c.card, color: active ? '#FFF' : c.text, cursor: 'pointer', fontWeight: active ? 500 : 400 });
   const tabStyle = (active) => ({ flex: 1, padding: '11px 4px', fontSize: '13px', border: 'none', borderRadius: '8px', backgroundColor: active ? c.tabActive : 'transparent', color: active ? c.tabText : c.sec, cursor: 'pointer', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' });
@@ -3137,34 +3151,50 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
+              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minWidth: 0 }}>
                 <div style={{ fontSize: '10px', color: c.sec, letterSpacing: '0.5px' }}>{t.balance}</div>
-                <div style={{ fontSize: '19px', fontWeight: 600, marginTop: '4px' }}>{balance.toLocaleString()} {currency}</div>
-                {hasCarryData && (
-                  <div style={{ marginTop: '10px', paddingTop: '9px', borderTop: '1px dashed ' + c.border }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
-                      <span style={{ fontSize: '10px', color: c.sec }}>{t.carryLabel}</span>
-                      <span style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', color: carryOver >= 0 ? c.incomeColor : c.expenseColor }}>
-                        {carryOver >= 0 ? '+' : '−'}{Math.abs(carryOver).toLocaleString()}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
-                      <span style={{ fontSize: '10px', color: c.sec }}>{t.withCarryLabel}</span>
-                      <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', color: balanceWithCarry >= 0 ? c.incomeColor : c.expenseColor }}>
-                        {balanceWithCarry.toLocaleString()} {currency}
-                      </span>
+                <div style={{ ...statNumStyle, color: balance >= 0 ? c.text : c.expenseColor }}>{balance.toLocaleString()} {currency}</div>
+              </div>
+              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minWidth: 0 }}>
+                <div style={{ fontSize: '10px', color: c.incomeColor, letterSpacing: '0.5px' }}>{t.income}</div>
+                <div style={{ ...statNumStyle, color: c.incomeColor }}>{income.toLocaleString()} {currency}</div>
+              </div>
+              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minWidth: 0 }}>
+                <div style={{ fontSize: '10px', color: c.expenseColor, letterSpacing: '0.5px' }}>{t.expense}</div>
+                <div style={{ ...statNumStyle, color: c.expenseColor }}>{expense.toLocaleString()} {currency}</div>
+              </div>
+
+              {hasCarryData && (
+                <div
+                  title={t.carryLabel + ' — ' + t.carryHint}
+                  style={{
+                    backgroundColor: c.carryColor + '12',
+                    border: '1px solid ' + c.carryColor + '3A',
+                    borderRadius: '12px',
+                    padding: '11px 12px',
+                    minWidth: 0,
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)'
+                  }}
+                >
+                  <div style={{ fontSize: '10px', color: c.carryColor, letterSpacing: '0.5px', opacity: 0.85, lineHeight: 1.2 }}>{t.carryShort}</div>
+                  <div style={{
+                    fontSize: '13px', fontWeight: 500, marginTop: '2px',
+                    overflowWrap: 'anywhere', lineHeight: 1.2, color: c.carryColor, opacity: 0.85
+                  }}>
+                    {carryOver >= 0 ? '+' : '−'}{Math.abs(carryOver).toLocaleString()}
+                  </div>
+                  <div style={{ marginTop: '7px', paddingTop: '7px', borderTop: '1px dashed ' + c.carryColor + '40' }}>
+                    <div style={{ fontSize: '10px', color: c.carryColor, letterSpacing: '0.5px', lineHeight: 1.2, opacity: 0.85 }}>{t.withCarryShort}</div>
+                    <div style={{
+                      fontSize: '16px', fontWeight: 600, marginTop: '2px',
+                      overflowWrap: 'anywhere', lineHeight: 1.2, color: c.carryColor
+                    }}>
+                      {balanceWithCarry.toLocaleString()}
                     </div>
                   </div>
-                )}
-              </div>
-              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
-                <div style={{ fontSize: '10px', color: c.incomeColor, letterSpacing: '0.5px' }}>{t.income}</div>
-                <div style={{ fontSize: '19px', fontWeight: 600, marginTop: '4px', color: c.incomeColor }}>{income.toLocaleString()} {currency}</div>
-              </div>
-              <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
-                <div style={{ fontSize: '10px', color: c.expenseColor, letterSpacing: '0.5px' }}>{t.expense}</div>
-                <div style={{ fontSize: '19px', fontWeight: 600, marginTop: '4px', color: c.expenseColor }}>{expense.toLocaleString()} {currency}</div>
-              </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
