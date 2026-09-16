@@ -22,7 +22,7 @@ const App = () => {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [formData, setFormData] = useState({
-    amount: '', category: '', customCategory: '', description: '',
+    amount: '', category: '', customCategory: '', description: '', tag: '',
     date: new Date().toISOString().split('T')[0]
   });
   const [geminiKey, setGeminiKey] = useState('');
@@ -43,6 +43,46 @@ const App = () => {
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState('');
   const [aiAnalysisPeriod, setAiAnalysisPeriod] = useState('');
+  const [aiExpanded, setAiExpanded] = useState(false);
+  const [importItems, setImportItems] = useState(null);
+  const [customCats, setCustomCats] = useState({ income: null, expense: null });
+  const [newCatName, setNewCatName] = useState({ income: '', expense: '' });
+  const [ownerName, setOwnerName] = useState('');
+  const [myCards, setMyCards] = useState([]);
+  const [newCardDigits, setNewCardDigits] = useState('');
+  const [newCardLabel, setNewCardLabel] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [planTab, setPlanTab] = useState('active');
+  const [confirmClosePlanId, setConfirmClosePlanId] = useState(null);
+  const [planData, setPlanData] = useState({ kind: 'iowe', what: '', person: '', amount: '', currency: 'UZS', dueDate: '', note: '' });
+  // Курсы к базовой валюте: { USD: 12800 } — 1 USD стоит 12800 базовых единиц
+  const [rates, setRates] = useState({});
+  const [baseCurrency, setBaseCurrency] = useState('UZS');
+  // Лимиты расходов: ключ "UZS|Продукты" -> число
+  const [budgets, setBudgets] = useState({});
+  const [budgetDraft, setBudgetDraft] = useState({ category: '', amount: '' });
+  // Регулярные платежи
+  const [recurring, setRecurring] = useState([]);
+  const [recurForm, setRecurForm] = useState(null);
+  // Метки операций
+  const [tags, setTags] = useState([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+  // Поиск по отчёту
+  const [searchText, setSearchText] = useState('');
+  // Резервные копии
+  const [lastBackup, setLastBackup] = useState('');
+  const backupInputRef = useRef(null);
+  // Ручной приём SMS
+  const [smsText, setSmsText] = useState('');
+  const [showSmsBox, setShowSmsBox] = useState(false);
+  // Почтовый ящик: пароль и список сообщений, которые уже забраны, но ещё не подтверждены
+  const [inboxKey, setInboxKey] = useState('');
+  const [tempInboxKey, setTempInboxKey] = useState('');
+  const [inboxBusy, setInboxBusy] = useState(false);
+  const [pendingAckIds, setPendingAckIds] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -117,7 +157,133 @@ const App = () => {
       chatExample1: 'Как рассчитать НДФЛ с зарплаты?',
       chatExample2: 'Что такое единый налоговый платёж для ИП?',
       chatExample3: 'Как оформить самозанятость в Узбекистане?',
-      chatExample4: 'Куда я больше всего трачу деньги?'
+      chatExample4: 'Куда я больше всего трачу деньги?',
+      carryLabel: 'Перенос с прошлых периодов',
+      withCarryLabel: 'Итого с переносом',
+      carryHint: 'Остаток на начало периода',
+      aiReadyBadge: 'анализ готов',
+      importTitle: '📥 Найденные операции',
+      importFound: 'Распознано операций',
+      importNew: 'новая',
+      importDup: 'уже внесена',
+      importTransfer: 'похоже на перевод между картами — проверьте',
+      importAdd: 'Внести выбранные',
+      importSelectAllNew: 'Отметить все новые',
+      importClearAll: 'Снять все',
+      importNothing: 'На изображении не найдено ни одной операции',
+      importCard: 'карта',
+      importBalanceAfter: 'остаток после',
+      importAdded: 'Внесено операций',
+      importOtherCurrency: 'Часть операций в другой валюте — переключите валюту вверху, чтобы их увидеть',
+      importNoneSelected: 'Не выбрано ни одной операции',
+      statementScanning: 'Читаю выписку...',
+      importDupHint: 'Серым отмечены операции, которые уже есть в базе — повторно они не вносятся.',
+      importFee: 'комиссия', importTotal: 'итого', importRef: 'номер', importExchange: 'обмен на',
+      importSelfTransfer: 'перевод между своими картами',
+      catNew: '➕ Новая категория…', catManage: 'Мои категории',
+      catManageHint: 'Добавляйте свои категории — они сохраняются. Ненужные стандартные можно удалить.',
+      catIncomeTitle: 'Категории доходов', catExpenseTitle: 'Категории расходов',
+      catAdd: 'Добавить', catAddPlaceholder: 'Напр.: Бухгалтерия',
+      catReset: 'Вернуть стандартные', catRenameTitle: 'Новое название категории',
+      catDeleteConfirm: 'Убрать категорию из списка? Уже внесённые операции останутся без изменений.',
+      catNewPlaceholder: 'Название новой категории',
+      plans: 'Планы', plansTitle: '📌 Планы и долги', planAdd: '+ Добавить запись',
+      planKind: 'Тип записи', planPurchase: '🛒 Запланировать покупку', planIOwe: '↗️ Я должен', planOwedMe: '↘️ Мне должны',
+      planWhat: 'Что именно', planWhatPlaceholder: 'Напр.: закупить канцтовары',
+      planPerson: 'Кому / от кого', planPersonPlaceholder: 'Напр.: Андрей',
+      planDue: 'Срок', planNote: 'Заметка', planNotePlaceholder: 'Необязательно',
+      planAmountOptional: 'Сумма (необязательно)',
+      planDone: 'Закрыть', planReopen: 'Вернуть в активные', planEdit: 'Изменить',
+      planEmpty: 'Пока нет ни планов, ни долгов',
+      planEmptyHint: 'Добавьте запись — она будет висеть здесь, пока вы сами её не закроете.',
+      planActive: 'Активные', planClosed: 'Закрытые',
+      planOverdue: 'Просрочено', planDueToday: 'Сегодня', planDueTomorrow: 'Завтра',
+      planInDays: 'через', planDaysShort: 'дн.', planNoDue: 'Без срока',
+      planRemindTitle: '⏰ Требует внимания', planRemindOpen: 'Открыть',
+      planAskCreateTx: 'Внести эту сумму как операцию?',
+      planCreateTx: 'Да, внести', planJustMark: 'Просто закрыть',
+      planTxCategory: 'Долги', planTotalIOwe: 'Я должен', planTotalOwedMe: 'Мне должны',
+      planDeleteConfirm: 'Удалить запись?', planClosedOn: 'закрыто',
+      ownerNameLabel: 'Ваше имя на картах', ownerNamePlaceholder: 'TURDALIYEV A.',
+      ownerNameHint: 'Как оно печатается в квитанциях. Помогает отличить перевод самому себе от настоящего расхода.',
+      myCardsLabel: 'Мои карты', myCardsHint: 'Последние 4 цифры каждой карты. Нужны, чтобы переводы между своими картами не считались расходом.',
+      myCardsDigits: '4 цифры', myCardsName: 'Название (необязательно)', myCardsAdd: 'Добавить карту',
+      backupTitle: 'Резервная копия',
+      backupHint: 'Все данные лежат только в этом браузере. Очистка данных сайта, переустановка приложения или чистка памяти системой сотрут их безвозвратно. Делайте копию хотя бы раз в месяц.',
+      backupExport: 'Сохранить копию',
+      backupImport: 'Восстановить из копии',
+      backupConfirm: 'Заменить ВСЕ текущие данные данными из файла? Текущие записи будут потеряны.',
+      backupDone: 'Копия сохранена',
+      backupRestored: 'Данные восстановлены',
+      backupBadFile: 'Файл не похож на резервную копию Wallet',
+      backupLast: 'Последняя копия',
+      backupNever: 'копию ещё не делали',
+      backupWarn: 'Давно не делали резервную копию данных',
+      ratesTitle: 'Курсы валют',
+      ratesHint: 'Сколько единиц базовой валюты стоит 1 единица другой. Нужно только для сводного баланса — сами операции всегда хранятся в своей валюте.',
+      ratesBase: 'Базовая валюта',
+      ratesFor: 'за 1',
+      totalTitle: 'Сводный баланс',
+      totalHint: 'Все валюты пересчитаны в',
+      totalNoRate: 'курс не задан',
+      reconTitle: '🔍 Сверка с банком',
+      reconHint: 'Сравниваем остаток, который банк прислал в последней квитанции по карте, с тем, что получается по вашим записям.',
+      reconCard: 'Карта',
+      reconBank: 'Банк сообщил',
+      reconOurs: 'По вашим записям',
+      reconDiff: 'Расхождение',
+      reconOk: 'Сходится',
+      reconGap: 'Похоже, какая-то операция не внесена',
+      reconEmpty: 'Пока нет квитанций с остатком на карте. Занесите SMS или квитанцию, где виден баланс, — и сверка появится.',
+      reconAsOf: 'на',
+      smsTitle: 'Приём SMS от банка',
+      smsHint: 'Вставьте текст банковского SMS — приложение разберёт его прямо на устройстве, без интернета и API-ключа.',
+      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
+      smsParse: 'Разобрать текст',
+      smsFail: 'Не удалось разобрать. Проверьте, что это текст банковского SMS.',
+      smsFound: 'Разобрано операций',
+      searchLabel: 'Поиск',
+      searchPlaceholder: 'Описание, категория, контрагент...',
+      budgetTitle: '🎯 Лимиты по категориям',
+      budgetHint: 'Месячный лимит расходов. Приложение просто показывает, сколько осталось, и не мешает тратить.',
+      budgetCategory: 'Категория',
+      budgetAmount: 'Лимит на месяц',
+      budgetAdd: 'Задать лимит',
+      budgetNone: 'Лимиты не заданы',
+      budgetLeft: 'осталось',
+      budgetOver: 'перерасход',
+      budgetSpent: 'потрачено',
+      budgetOnly: 'Лимиты считаются за текущий месяц в валюте',
+      recurTitle: '🔁 Регулярные платежи',
+      recurHint: 'Аренда, подписки, интернет. В нужный день месяца приложение напомнит и внесёт платёж одной кнопкой.',
+      recurAdd: '+ Добавить регулярный',
+      recurDay: 'День месяца',
+      recurDue: 'Пора внести',
+      recurPost: 'Внести',
+      recurSkip: 'Пропустить месяц',
+      recurNone: 'Регулярных платежей нет',
+      recurLast: 'внесён',
+      recurNever: 'ещё не вносился',
+      recurEvery: 'каждое',
+      recurDayShort: 'число',
+      tagLabel: 'Метка',
+      tagNone: 'Без метки',
+      tagAll: 'Все метки',
+      tagsManage: 'Метки операций',
+      tagsHint: 'Разделяйте личные траты и рабочие — отчёт можно будет собрать по одной метке.',
+      tagPlaceholder: 'Название метки',
+      inboxTitle: 'Автоматический приём SMS',
+      inboxHint: 'Телефон сам пересылает банковские SMS на ваш сервер, а приложение забирает их при открытии. Настраивается один раз, дальше вводить ничего не нужно.',
+      inboxKeyLabel: 'Пароль почтового ящика',
+      inboxKeyPlaceholder: 'тот же, что в переменной WALLET_INBOX_KEY',
+      inboxCheck: 'Проверить сейчас',
+      inboxChecking: 'Проверяю...',
+      inboxEmpty: 'Новых сообщений нет',
+      inboxFail: 'Не удалось связаться с почтовым ящиком',
+      inboxBadKey: 'Сервер не принял пароль',
+      inboxNoParse: 'Сообщения получены, но разобрать их не удалось',
+      inboxGot: 'Получено сообщений',
+      inboxPrivacy: 'Текст SMS будет проходить через ваш сервер и временно храниться там до месяца. Суммы и операции сервер не разбирает и не хранит.'
     },
     uz: {
       appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
@@ -183,7 +349,133 @@ const App = () => {
       chatExample1: 'Ish haqidan NDFLni qanday hisoblash?',
       chatExample2: 'IPP uchun yagona soliq to\'lovi nima?',
       chatExample3: 'O\'zbekistonda samozanyat sifatida qanday ro\'yxatdan o\'tish?',
-      chatExample4: 'Qayerga ko\'proq pul sarflamoqdaman?'
+      chatExample4: 'Qayerga ko\'proq pul sarflamoqdaman?',
+      carryLabel: 'O\'tgan davrlardan qoldiq',
+      withCarryLabel: 'Qoldiq bilan jami',
+      carryHint: 'Davr boshidagi qoldiq',
+      aiReadyBadge: 'tahlil tayyor',
+      importTitle: '📥 Topilgan amaliyotlar',
+      importFound: 'Aniqlangan amaliyotlar',
+      importNew: 'yangi',
+      importDup: 'allaqachon kiritilgan',
+      importTransfer: 'kartalar orasidagi o\'tkazmaga o\'xshaydi — tekshiring',
+      importAdd: 'Tanlanganlarni kiritish',
+      importSelectAllNew: 'Barcha yangilarni belgilash',
+      importClearAll: 'Belgilashni olib tashlash',
+      importNothing: 'Rasmda birorta ham amaliyot topilmadi',
+      importCard: 'karta',
+      importBalanceAfter: 'keyingi qoldiq',
+      importAdded: 'Kiritilgan amaliyotlar',
+      importOtherCurrency: 'Ba\'zi amaliyotlar boshqa valyutada — ularni ko\'rish uchun yuqoridan valyutani almashtiring',
+      importNoneSelected: 'Birorta amaliyot tanlanmadi',
+      statementScanning: 'Ko\'chirmani o\'qiyapman...',
+      importDupHint: 'Kulrang rangda bazada allaqachon mavjud amaliyotlar — ular qayta kiritilmaydi.',
+      importFee: 'komissiya', importTotal: 'jami', importRef: 'raqam', importExchange: 'almashtirildi',
+      importSelfTransfer: 'o\'z kartalari orasidagi o\'tkazma',
+      catNew: '➕ Yangi kategoriya…', catManage: 'Mening kategoriyalarim',
+      catManageHint: 'O\'z kategoriyalaringizni qo\'shing — ular saqlanadi. Keraksiz standartlarini o\'chirish mumkin.',
+      catIncomeTitle: 'Daromad kategoriyalari', catExpenseTitle: 'Xarajat kategoriyalari',
+      catAdd: 'Qo\'shish', catAddPlaceholder: 'Mas: Buxgalteriya',
+      catReset: 'Standartlarni qaytarish', catRenameTitle: 'Kategoriyaning yangi nomi',
+      catDeleteConfirm: 'Kategoriya ro\'yxatdan olib tashlansinmi? Kiritilgan amaliyotlar o\'zgarishsiz qoladi.',
+      catNewPlaceholder: 'Yangi kategoriya nomi',
+      plans: 'Rejalar', plansTitle: '📌 Rejalar va qarzlar', planAdd: '+ Yozuv qo\'shish',
+      planKind: 'Yozuv turi', planPurchase: '🛒 Xaridni rejalashtirish', planIOwe: '↗️ Men qarzdorman', planOwedMe: '↘️ Menga qarzdor',
+      planWhat: 'Aynan nima', planWhatPlaceholder: 'Mas: kanselyariya olish',
+      planPerson: 'Kimga / kimdan', planPersonPlaceholder: 'Mas: Andrey',
+      planDue: 'Muddat', planNote: 'Izoh', planNotePlaceholder: 'Ixtiyoriy',
+      planAmountOptional: 'Summa (ixtiyoriy)',
+      planDone: 'Yopish', planReopen: 'Faollarga qaytarish', planEdit: 'Tahrirlash',
+      planEmpty: 'Hozircha reja ham, qarz ham yo\'q',
+      planEmptyHint: 'Yozuv qo\'shing — siz uni yopmaguningizcha shu yerda turadi.',
+      planActive: 'Faol', planClosed: 'Yopilgan',
+      planOverdue: 'Muddati o\'tgan', planDueToday: 'Bugun', planDueTomorrow: 'Ertaga',
+      planInDays: 'keyin', planDaysShort: 'kun', planNoDue: 'Muddatsiz',
+      planRemindTitle: '⏰ Diqqat talab qiladi', planRemindOpen: 'Ochish',
+      planAskCreateTx: 'Bu summa amaliyot sifatida kiritilsinmi?',
+      planCreateTx: 'Ha, kiritilsin', planJustMark: 'Shunchaki yopish',
+      planTxCategory: 'Qarzlar', planTotalIOwe: 'Men qarzdorman', planTotalOwedMe: 'Menga qarzdor',
+      planDeleteConfirm: 'Yozuv o\'chirilsinmi?', planClosedOn: 'yopilgan',
+      ownerNameLabel: 'Kartalardagi ismingiz', ownerNamePlaceholder: 'TURDALIYEV A.',
+      ownerNameHint: 'Kvitansiyalarda qanday chiqsa shunday. O\'zingizga o\'tkazmani haqiqiy xarajatdan ajratishga yordam beradi.',
+      myCardsLabel: 'Mening kartalarim', myCardsHint: 'Har bir kartaning oxirgi 4 raqami. O\'z kartalari orasidagi o\'tkazma xarajat deb hisoblanmasligi uchun kerak.',
+      myCardsDigits: '4 raqam', myCardsName: 'Nomi (ixtiyoriy)', myCardsAdd: 'Karta qo\'shish',
+      backupTitle: 'Zaxira nusxa',
+      backupHint: 'Barcha ma\'lumotlar faqat shu brauzerda saqlanadi. Sayt ma\'lumotlarini tozalash yoki ilovani qayta o\'rnatish ularni butunlay o\'chiradi. Oyiga kamida bir marta nusxa oling.',
+      backupExport: 'Nusxani saqlash',
+      backupImport: 'Nusxadan tiklash',
+      backupConfirm: 'BARCHA joriy ma\'lumotlar fayldagilar bilan almashtirilsinmi? Joriy yozuvlar yo\'qoladi.',
+      backupDone: 'Nusxa saqlandi',
+      backupRestored: 'Ma\'lumotlar tiklandi',
+      backupBadFile: 'Fayl Wallet zaxira nusxasiga o\'xshamaydi',
+      backupLast: 'Oxirgi nusxa',
+      backupNever: 'hali nusxa olinmagan',
+      backupWarn: 'Ancha vaqtdan beri zaxira nusxa olinmagan',
+      ratesTitle: 'Valyuta kurslari',
+      ratesHint: 'Boshqa valyutaning 1 birligi necha asosiy valyuta birligiga teng. Faqat umumiy qoldiq uchun kerak.',
+      ratesBase: 'Asosiy valyuta',
+      ratesFor: '1 uchun',
+      totalTitle: 'Umumiy qoldiq',
+      totalHint: 'Barcha valyutalar qayta hisoblandi:',
+      totalNoRate: 'kurs kiritilmagan',
+      reconTitle: '🔍 Bank bilan solishtirish',
+      reconHint: 'Bank oxirgi kvitansiyada yuborgan qoldiqni yozuvlaringizdan chiqadigan qoldiq bilan solishtiramiz.',
+      reconCard: 'Karta',
+      reconBank: 'Bank xabar qildi',
+      reconOurs: 'Yozuvlaringiz bo\'yicha',
+      reconDiff: 'Farq',
+      reconOk: 'Mos keladi',
+      reconGap: 'Qandaydir amaliyot kiritilmaganga o\'xshaydi',
+      reconEmpty: 'Hozircha karta qoldig\'i ko\'rsatilgan kvitansiya yo\'q. Balans ko\'rinadigan SMS yoki kvitansiyani kiriting.',
+      reconAsOf: 'sanasiga',
+      smsTitle: 'Bank SMS qabul qilish',
+      smsHint: 'Bank SMS matnini qo\'ying — ilova uni qurilmada, internetsiz va API kalitsiz tahlil qiladi.',
+      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
+      smsParse: 'Matnni tahlil qilish',
+      smsFail: 'Tahlil qilib bo\'lmadi. Bu bank SMS matni ekanini tekshiring.',
+      smsFound: 'Tahlil qilingan amaliyotlar',
+      searchLabel: 'Qidiruv',
+      searchPlaceholder: 'Tavsif, kategoriya, kontragent...',
+      budgetTitle: '🎯 Kategoriya limitlari',
+      budgetHint: 'Oylik xarajat limiti. Ilova qancha qolganini ko\'rsatadi, xalaqit bermaydi.',
+      budgetCategory: 'Kategoriya',
+      budgetAmount: 'Oylik limit',
+      budgetAdd: 'Limit belgilash',
+      budgetNone: 'Limitlar belgilanmagan',
+      budgetLeft: 'qoldi',
+      budgetOver: 'limitdan oshdi',
+      budgetSpent: 'sarflandi',
+      budgetOnly: 'Limitlar joriy oy uchun shu valyutada hisoblanadi:',
+      recurTitle: '🔁 Doimiy to\'lovlar',
+      recurHint: 'Ijara, obunalar, internet. Kerakli kunda ilova eslatadi va bitta tugma bilan kiritadi.',
+      recurAdd: '+ Doimiy to\'lov qo\'shish',
+      recurDay: 'Oy kuni',
+      recurDue: 'Kiritish vaqti',
+      recurPost: 'Kiritish',
+      recurSkip: 'Bu oyni o\'tkazib yuborish',
+      recurNone: 'Doimiy to\'lovlar yo\'q',
+      recurLast: 'kiritilgan',
+      recurNever: 'hali kiritilmagan',
+      recurEvery: 'har oyning',
+      recurDayShort: '-kuni',
+      tagLabel: 'Belgi',
+      tagNone: 'Belgisiz',
+      tagAll: 'Barcha belgilar',
+      tagsManage: 'Amaliyot belgilari',
+      tagsHint: 'Shaxsiy va ish xarajatlarini ajrating — hisobotni bitta belgi bo\'yicha yig\'ish mumkin.',
+      tagPlaceholder: 'Belgi nomi',
+      inboxTitle: 'SMS avtomatik qabul qilish',
+      inboxHint: 'Telefon bank SMS\'larini serveringizga o\'zi yuboradi, ilova esa ochilganda ularni oladi. Bir marta sozlanadi, keyin hech narsa kiritish kerak emas.',
+      inboxKeyLabel: 'Pochta qutisi paroli',
+      inboxKeyPlaceholder: 'WALLET_INBOX_KEY dagi bilan bir xil',
+      inboxCheck: 'Hozir tekshirish',
+      inboxChecking: 'Tekshiryapman...',
+      inboxEmpty: 'Yangi xabarlar yo\'q',
+      inboxFail: 'Pochta qutisi bilan bog\'lanib bo\'lmadi',
+      inboxBadKey: 'Server parolni qabul qilmadi',
+      inboxNoParse: 'Xabarlar olindi, lekin tahlil qilib bo\'lmadi',
+      inboxGot: 'Olingan xabarlar',
+      inboxPrivacy: 'SMS matni serveringiz orqali o\'tadi va u yerda bir oygacha vaqtincha saqlanadi. Server summalarni tahlil qilmaydi va saqlamaydi.'
     },
     en: {
       appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
@@ -249,7 +541,133 @@ const App = () => {
       chatExample1: 'How to calculate income tax from salary?',
       chatExample2: 'What is a unified tax payment for entrepreneurs?',
       chatExample3: 'How to register as self-employed in Uzbekistan?',
-      chatExample4: 'Where do I spend the most money?'
+      chatExample4: 'Where do I spend the most money?',
+      carryLabel: 'Carried over from previous periods',
+      withCarryLabel: 'Total with carry-over',
+      carryHint: 'Balance at the start of the period',
+      aiReadyBadge: 'analysis ready',
+      importTitle: '📥 Detected transactions',
+      importFound: 'Transactions detected',
+      importNew: 'new',
+      importDup: 'already recorded',
+      importTransfer: 'looks like a card-to-card transfer — please check',
+      importAdd: 'Add selected',
+      importSelectAllNew: 'Select all new',
+      importClearAll: 'Clear selection',
+      importNothing: 'No transactions found in the image',
+      importCard: 'card',
+      importBalanceAfter: 'balance after',
+      importAdded: 'Transactions added',
+      importOtherCurrency: 'Some transactions are in another currency — switch the currency above to see them',
+      importNoneSelected: 'No transactions selected',
+      statementScanning: 'Reading the statement...',
+      importDupHint: 'Greyed-out rows are already in your data — they will not be added again.',
+      importFee: 'fee', importTotal: 'total', importRef: 'ref', importExchange: 'exchanged for',
+      importSelfTransfer: 'transfer between your own cards',
+      catNew: '➕ New category…', catManage: 'My categories',
+      catManageHint: 'Add your own categories — they are saved. Unused default ones can be removed.',
+      catIncomeTitle: 'Income categories', catExpenseTitle: 'Expense categories',
+      catAdd: 'Add', catAddPlaceholder: 'E.g.: Accounting',
+      catReset: 'Restore defaults', catRenameTitle: 'New category name',
+      catDeleteConfirm: 'Remove this category from the list? Recorded transactions stay unchanged.',
+      catNewPlaceholder: 'New category name',
+      plans: 'Plans', plansTitle: '📌 Plans and debts', planAdd: '+ Add entry',
+      planKind: 'Entry type', planPurchase: '🛒 Plan a purchase', planIOwe: '↗️ I owe', planOwedMe: '↘️ Owed to me',
+      planWhat: 'What exactly', planWhatPlaceholder: 'E.g.: buy office supplies',
+      planPerson: 'To / from whom', planPersonPlaceholder: 'E.g.: Andrey',
+      planDue: 'Due date', planNote: 'Note', planNotePlaceholder: 'Optional',
+      planAmountOptional: 'Amount (optional)',
+      planDone: 'Close', planReopen: 'Reopen', planEdit: 'Edit',
+      planEmpty: 'No plans or debts yet',
+      planEmptyHint: 'Add an entry — it stays here until you close it yourself.',
+      planActive: 'Active', planClosed: 'Closed',
+      planOverdue: 'Overdue', planDueToday: 'Today', planDueTomorrow: 'Tomorrow',
+      planInDays: 'in', planDaysShort: 'd', planNoDue: 'No due date',
+      planRemindTitle: '⏰ Needs attention', planRemindOpen: 'Open',
+      planAskCreateTx: 'Record this amount as a transaction?',
+      planCreateTx: 'Yes, record it', planJustMark: 'Just close',
+      planTxCategory: 'Debts', planTotalIOwe: 'I owe', planTotalOwedMe: 'Owed to me',
+      planDeleteConfirm: 'Delete this entry?', planClosedOn: 'closed',
+      ownerNameLabel: 'Your name on the cards', ownerNamePlaceholder: 'TURDALIYEV A.',
+      ownerNameHint: 'As printed on receipts. Helps tell a transfer to yourself from a real expense.',
+      myCardsLabel: 'My cards', myCardsHint: 'Last 4 digits of each card. Keeps transfers between your own cards from counting as expenses.',
+      myCardsDigits: '4 digits', myCardsName: 'Label (optional)', myCardsAdd: 'Add card',
+      backupTitle: 'Backup',
+      backupHint: 'All data lives only in this browser. Clearing site data, reinstalling the app or the system reclaiming storage will wipe it for good. Make a copy at least once a month.',
+      backupExport: 'Save a backup',
+      backupImport: 'Restore from backup',
+      backupConfirm: 'Replace ALL current data with the contents of this file? Current records will be lost.',
+      backupDone: 'Backup saved',
+      backupRestored: 'Data restored',
+      backupBadFile: 'This file does not look like a Wallet backup',
+      backupLast: 'Last backup',
+      backupNever: 'no backup yet',
+      backupWarn: 'It has been a while since your last backup',
+      ratesTitle: 'Exchange rates',
+      ratesHint: 'How many units of the base currency one unit of another is worth. Used only for the combined balance.',
+      ratesBase: 'Base currency',
+      ratesFor: 'per 1',
+      totalTitle: 'Combined balance',
+      totalHint: 'All currencies converted to',
+      totalNoRate: 'no rate set',
+      reconTitle: '🔍 Reconciliation with the bank',
+      reconHint: 'We compare the balance the bank reported in the latest receipt for a card with the balance implied by your records.',
+      reconCard: 'Card',
+      reconBank: 'Bank reported',
+      reconOurs: 'Your records give',
+      reconDiff: 'Difference',
+      reconOk: 'Matches',
+      reconGap: 'Looks like a transaction is missing',
+      reconEmpty: 'No receipts with a card balance yet. Add an SMS or receipt showing the balance and reconciliation will appear.',
+      reconAsOf: 'as of',
+      smsTitle: 'Bank SMS intake',
+      smsHint: 'Paste the text of a bank SMS — the app parses it on your device, with no internet and no API key.',
+      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
+      smsParse: 'Parse text',
+      smsFail: 'Could not parse it. Check that this is the text of a bank SMS.',
+      smsFound: 'Transactions parsed',
+      searchLabel: 'Search',
+      searchPlaceholder: 'Description, category, counterparty...',
+      budgetTitle: '🎯 Category limits',
+      budgetHint: 'A monthly spending limit. The app simply shows what is left and never blocks you.',
+      budgetCategory: 'Category',
+      budgetAmount: 'Monthly limit',
+      budgetAdd: 'Set a limit',
+      budgetNone: 'No limits set',
+      budgetLeft: 'left',
+      budgetOver: 'over budget',
+      budgetSpent: 'spent',
+      budgetOnly: 'Limits are counted for the current month in',
+      recurTitle: '🔁 Recurring payments',
+      recurHint: 'Rent, subscriptions, internet. On the right day of the month the app reminds you and records the payment in one tap.',
+      recurAdd: '+ Add a recurring payment',
+      recurDay: 'Day of month',
+      recurDue: 'Due now',
+      recurPost: 'Record',
+      recurSkip: 'Skip this month',
+      recurNone: 'No recurring payments',
+      recurLast: 'recorded',
+      recurNever: 'never recorded',
+      recurEvery: 'every',
+      recurDayShort: 'of the month',
+      tagLabel: 'Tag',
+      tagNone: 'No tag',
+      tagAll: 'All tags',
+      tagsManage: 'Transaction tags',
+      tagsHint: 'Separate personal spending from work — a report can then be built for a single tag.',
+      tagPlaceholder: 'Tag name',
+      inboxTitle: 'Automatic SMS intake',
+      inboxHint: 'Your phone forwards bank SMS to your own server, and the app collects them when you open it. Set it up once and you never type anything again.',
+      inboxKeyLabel: 'Inbox password',
+      inboxKeyPlaceholder: 'the same as in WALLET_INBOX_KEY',
+      inboxCheck: 'Check now',
+      inboxChecking: 'Checking...',
+      inboxEmpty: 'No new messages',
+      inboxFail: 'Could not reach the inbox',
+      inboxBadKey: 'The server rejected the password',
+      inboxNoParse: 'Messages received, but they could not be parsed',
+      inboxGot: 'Messages received',
+      inboxPrivacy: 'SMS text passes through your own server and is stored there for up to a month. The server never parses or keeps amounts or transactions.'
     },
     tr: {
       appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
@@ -315,7 +733,133 @@ const App = () => {
       chatExample1: 'Maaştan gelir vergisi nasıl hesaplanır?',
       chatExample2: 'Girişimciler için birleşik vergi ödemesi nedir?',
       chatExample3: 'Özbekistan\'da serbest çalışan olarak nasıl kayıt olurum?',
-      chatExample4: 'Nereye en çok para harcıyorum?'
+      chatExample4: 'Nereye en çok para harcıyorum?',
+      carryLabel: 'Önceki dönemlerden devir',
+      withCarryLabel: 'Devirle birlikte toplam',
+      carryHint: 'Dönem başı bakiye',
+      aiReadyBadge: 'analiz hazır',
+      importTitle: '📥 Bulunan işlemler',
+      importFound: 'Tanınan işlem sayısı',
+      importNew: 'yeni',
+      importDup: 'zaten kayıtlı',
+      importTransfer: 'kartlar arası transfer gibi görünüyor — kontrol edin',
+      importAdd: 'Seçilenleri ekle',
+      importSelectAllNew: 'Tüm yenileri seç',
+      importClearAll: 'Seçimi kaldır',
+      importNothing: 'Görselde hiçbir işlem bulunamadı',
+      importCard: 'kart',
+      importBalanceAfter: 'sonraki bakiye',
+      importAdded: 'Eklenen işlem sayısı',
+      importOtherCurrency: 'Bazı işlemler farklı para biriminde — görmek için yukarıdan para birimini değiştirin',
+      importNoneSelected: 'Hiçbir işlem seçilmedi',
+      statementScanning: 'Ekstre okunuyor...',
+      importDupHint: 'Gri satırlar verilerinizde zaten var — tekrar eklenmeyecek.',
+      importFee: 'komisyon', importTotal: 'toplam', importRef: 'no', importExchange: 'şuna çevrildi',
+      importSelfTransfer: 'kendi kartlarınız arasında transfer',
+      catNew: '➕ Yeni kategori…', catManage: 'Kategorilerim',
+      catManageHint: 'Kendi kategorilerinizi ekleyin — kaydedilir. Kullanmadığınız varsayılanları silebilirsiniz.',
+      catIncomeTitle: 'Gelir kategorileri', catExpenseTitle: 'Gider kategorileri',
+      catAdd: 'Ekle', catAddPlaceholder: 'Örn: Muhasebe',
+      catReset: 'Varsayılanlara dön', catRenameTitle: 'Yeni kategori adı',
+      catDeleteConfirm: 'Kategori listeden çıkarılsın mı? Kayıtlı işlemler değişmez.',
+      catNewPlaceholder: 'Yeni kategori adı',
+      plans: 'Planlar', plansTitle: '📌 Planlar ve borçlar', planAdd: '+ Kayıt ekle',
+      planKind: 'Kayıt türü', planPurchase: '🛒 Alışveriş planla', planIOwe: '↗️ Borçluyum', planOwedMe: '↘️ Bana borçlu',
+      planWhat: 'Tam olarak ne', planWhatPlaceholder: 'Örn: kırtasiye almak',
+      planPerson: 'Kime / kimden', planPersonPlaceholder: 'Örn: Andrey',
+      planDue: 'Son tarih', planNote: 'Not', planNotePlaceholder: 'İsteğe bağlı',
+      planAmountOptional: 'Tutar (isteğe bağlı)',
+      planDone: 'Kapat', planReopen: 'Yeniden aç', planEdit: 'Düzenle',
+      planEmpty: 'Henüz plan veya borç yok',
+      planEmptyHint: 'Bir kayıt ekleyin — siz kapatana kadar burada durur.',
+      planActive: 'Aktif', planClosed: 'Kapalı',
+      planOverdue: 'Gecikmiş', planDueToday: 'Bugün', planDueTomorrow: 'Yarın',
+      planInDays: 'içinde', planDaysShort: 'gün', planNoDue: 'Tarihsiz',
+      planRemindTitle: '⏰ Dikkat gerekiyor', planRemindOpen: 'Aç',
+      planAskCreateTx: 'Bu tutar işlem olarak kaydedilsin mi?',
+      planCreateTx: 'Evet, kaydet', planJustMark: 'Sadece kapat',
+      planTxCategory: 'Borçlar', planTotalIOwe: 'Borçluyum', planTotalOwedMe: 'Bana borçlu',
+      planDeleteConfirm: 'Kayıt silinsin mi?', planClosedOn: 'kapatıldı',
+      ownerNameLabel: 'Kartlardaki adınız', ownerNamePlaceholder: 'TURDALIYEV A.',
+      ownerNameHint: 'Dekontlarda yazıldığı gibi. Kendinize transferi gerçek giderden ayırmaya yardımcı olur.',
+      myCardsLabel: 'Kartlarım', myCardsHint: 'Her kartın son 4 hanesi. Kendi kartlarınız arasındaki transferlerin gider sayılmasını önler.',
+      myCardsDigits: '4 hane', myCardsName: 'Etiket (isteğe bağlı)', myCardsAdd: 'Kart ekle',
+      backupTitle: 'Yedek',
+      backupHint: 'Tüm veriler yalnızca bu tarayıcıda durur. Site verilerini temizlemek veya uygulamayı yeniden kurmak verileri kalıcı olarak siler. Ayda en az bir kez yedek alın.',
+      backupExport: 'Yedek kaydet',
+      backupImport: 'Yedekten geri yükle',
+      backupConfirm: 'TÜM mevcut veriler bu dosyadakilerle değiştirilsin mi? Mevcut kayıtlar kaybolur.',
+      backupDone: 'Yedek kaydedildi',
+      backupRestored: 'Veriler geri yüklendi',
+      backupBadFile: 'Bu dosya bir Wallet yedeğine benzemiyor',
+      backupLast: 'Son yedek',
+      backupNever: 'henüz yedek alınmadı',
+      backupWarn: 'Uzun süredir yedek almadınız',
+      ratesTitle: 'Döviz kurları',
+      ratesHint: 'Başka bir para biriminin 1 birimi kaç temel para birimi eder. Yalnızca birleşik bakiye için gerekir.',
+      ratesBase: 'Temel para birimi',
+      ratesFor: '1 için',
+      totalTitle: 'Birleşik bakiye',
+      totalHint: 'Tüm para birimleri şuna çevrildi:',
+      totalNoRate: 'kur girilmedi',
+      reconTitle: '🔍 Bankayla mutabakat',
+      reconHint: 'Bankanın son dekontta bildirdiği bakiyeyi, kayıtlarınızdan çıkan bakiyeyle karşılaştırıyoruz.',
+      reconCard: 'Kart',
+      reconBank: 'Banka bildirdi',
+      reconOurs: 'Kayıtlarınıza göre',
+      reconDiff: 'Fark',
+      reconOk: 'Uyuşuyor',
+      reconGap: 'Görünüşe göre bir işlem girilmemiş',
+      reconEmpty: 'Henüz kart bakiyesi görünen bir dekont yok. Bakiyenin göründüğü bir SMS veya dekont ekleyin.',
+      reconAsOf: 'tarihi itibarıyla',
+      smsTitle: 'Banka SMS alımı',
+      smsHint: 'Banka SMS metnini yapıştırın — uygulama onu cihazınızda, internetsiz ve API anahtarsız çözümler.',
+      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
+      smsParse: 'Metni çözümle',
+      smsFail: 'Çözümlenemedi. Bunun bir banka SMS metni olduğundan emin olun.',
+      smsFound: 'Çözümlenen işlem sayısı',
+      searchLabel: 'Arama',
+      searchPlaceholder: 'Açıklama, kategori, karşı taraf...',
+      budgetTitle: '🎯 Kategori limitleri',
+      budgetHint: 'Aylık harcama limiti. Uygulama sadece ne kadar kaldığını gösterir, engellemez.',
+      budgetCategory: 'Kategori',
+      budgetAmount: 'Aylık limit',
+      budgetAdd: 'Limit belirle',
+      budgetNone: 'Limit belirlenmedi',
+      budgetLeft: 'kaldı',
+      budgetOver: 'limit aşıldı',
+      budgetSpent: 'harcandı',
+      budgetOnly: 'Limitler bu ay için şu para biriminde hesaplanır:',
+      recurTitle: '🔁 Düzenli ödemeler',
+      recurHint: 'Kira, abonelikler, internet. Ayın ilgili gününde uygulama hatırlatır ve tek dokunuşla kaydeder.',
+      recurAdd: '+ Düzenli ödeme ekle',
+      recurDay: 'Ayın günü',
+      recurDue: 'Zamanı geldi',
+      recurPost: 'Kaydet',
+      recurSkip: 'Bu ayı atla',
+      recurNone: 'Düzenli ödeme yok',
+      recurLast: 'kaydedildi',
+      recurNever: 'hiç kaydedilmedi',
+      recurEvery: 'her ayın',
+      recurDayShort: '. günü',
+      tagLabel: 'Etiket',
+      tagNone: 'Etiketsiz',
+      tagAll: 'Tüm etiketler',
+      tagsManage: 'İşlem etiketleri',
+      tagsHint: 'Kişisel harcamaları işten ayırın — rapor tek etikete göre alınabilir.',
+      tagPlaceholder: 'Etiket adı',
+      inboxTitle: 'Otomatik SMS alımı',
+      inboxHint: 'Telefonunuz banka SMS\'lerini kendi sunucunuza iletir, uygulama da açıldığında onları alır. Bir kez ayarlanır, sonra hiçbir şey girmezsiniz.',
+      inboxKeyLabel: 'Gelen kutusu parolası',
+      inboxKeyPlaceholder: 'WALLET_INBOX_KEY ile aynı',
+      inboxCheck: 'Şimdi kontrol et',
+      inboxChecking: 'Kontrol ediliyor...',
+      inboxEmpty: 'Yeni mesaj yok',
+      inboxFail: 'Gelen kutusuna ulaşılamadı',
+      inboxBadKey: 'Sunucu parolayı kabul etmedi',
+      inboxNoParse: 'Mesajlar alındı ama çözümlenemedi',
+      inboxGot: 'Alınan mesaj sayısı',
+      inboxPrivacy: 'SMS metni kendi sunucunuzdan geçer ve orada en fazla bir ay saklanır. Sunucu tutarları çözümlemez ve saklamaz.'
     }
   };
 
@@ -332,12 +876,24 @@ const App = () => {
         setCurrency(data.currency || 'UZS');
         if (data.currencies) setCurrencies(data.currencies);
         if (data.dashboardPeriod) setDashboardPeriod(data.dashboardPeriod);
+        if (data.customCats) setCustomCats({ income: data.customCats.income || null, expense: data.customCats.expense || null });
+        if (typeof data.ownerName === 'string') setOwnerName(data.ownerName);
+        if (Array.isArray(data.myCards)) setMyCards(data.myCards);
+        if (Array.isArray(data.plans)) setPlans(data.plans);
+        if (data.rates && typeof data.rates === 'object') setRates(data.rates);
+        if (typeof data.baseCurrency === 'string') setBaseCurrency(data.baseCurrency);
+        if (data.budgets && typeof data.budgets === 'object') setBudgets(data.budgets);
+        if (Array.isArray(data.recurring)) setRecurring(data.recurring);
+        if (Array.isArray(data.tags)) setTags(data.tags);
+        if (typeof data.lastBackup === 'string') setLastBackup(data.lastBackup);
       } catch (e) {}
     }
     const key = localStorage.getItem('walletGeminiKey');
     if (key) { setGeminiKey(key); setTempKey(key); }
     const gKey = localStorage.getItem('walletGroqKey');
     if (gKey) { setGroqKey(gKey); setTempGroqKey(gKey); }
+    const inbK = localStorage.getItem('walletInboxKey');
+    if (inbK) { setInboxKey(inbK); setTempInboxKey(inbK); }
     const orK = localStorage.getItem('walletOrKey');
     if (orK) { setOrKey(orK); setTempOrKey(orK); }
     const savedAi = localStorage.getItem('walletAiAnalysis');
@@ -362,8 +918,8 @@ const App = () => {
       isFirstRender.current = false;
       return;
     }
-    localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod }));
-  }, [transactions, theme, language, currency, currencies, dashboardPeriod]);
+    localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup }));
+  }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup]);
 
   // Автосворачивание раскрытых прошлых месяцев и годов при любом действии вне списка
   useEffect(() => {
@@ -378,33 +934,204 @@ const App = () => {
   };
   const c = themes[theme];
 
-  const isOther = formData.category === 'Другое' || formData.category === 'Boshqa' || formData.category === 'Other' || formData.category === 'Diğer';
+  // ===== КАТЕГОРИИ ПОЛЬЗОВАТЕЛЯ =====
+  // Пока пользователь не трогал список — показываем встроенный набор текущего языка.
+  // Как только он что-то добавил, переименовал или удалил — список становится его собственным
+  // и больше не меняется при переключении языка.
+  const catsFor = (type) => {
+    const own = type === 'income' ? customCats.income : customCats.expense;
+    if (own && own.length) return own;
+    return type === 'income' ? t.categoriesInc : t.categoriesExp;
+  };
+
+  // Списки правим через функциональное обновление: если пользователь ещё не заводил свой набор,
+  // за основу берётся встроенный — так первое же изменение материализует список.
+  const baseList = (prev, type) => (type === 'income' ? prev.income : prev.expense)
+    || (type === 'income' ? t.categoriesInc : t.categoriesExp);
+
+  const addCategory = (type, name) => {
+    const clean = String(name || '').trim();
+    if (!clean) return false;
+    setCustomCats(prev => {
+      const base = baseList(prev, type);
+      if (base.some(x => x.toLowerCase() === clean.toLowerCase())) return prev;
+      return { ...prev, [type]: [...base, clean] };
+    });
+    return true;
+  };
+
+  const removeCategory = (type, name) => {
+    setCustomCats(prev => ({ ...prev, [type]: baseList(prev, type).filter(x => x !== name) }));
+  };
+
+  // Переименование правит и уже внесённые операции, чтобы отчёты не распались на два имени
+  const renameCategory = (type, oldName, newName) => {
+    const clean = String(newName || '').trim();
+    if (!clean || clean === oldName) return;
+    setCustomCats(prev => ({ ...prev, [type]: baseList(prev, type).map(x => x === oldName ? clean : x) }));
+    setTransactions(prev => prev.map(tx => (tx.type === type && tx.category === oldName) ? { ...tx, category: clean } : tx));
+  };
+
+  const resetCategories = (type) => setCustomCats(prev => ({ ...prev, [type]: null }));
+
+  const isNewCat = formData.category === '__new__';
 
   const submitTransaction = (e) => {
     e.preventDefault();
-    const finalCategory = isOther ? formData.customCategory : formData.category;
+    const finalCategory = isNewCat ? formData.customCategory.trim() : formData.category;
     if (!formData.amount || !finalCategory) return;
+    if (isNewCat) addCategory(formType, finalCategory);
     if (editingId) {
-      setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, date: formData.date } : tx));
+      setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date } : tx));
       setEditingId(null);
     } else {
-      setTransactions([...transactions, { id: Date.now(), type: formType, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, currency, date: formData.date }]);
+      setTransactions([...transactions, { id: Date.now(), type: formType, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
     }
-    setFormData({ amount: '', category: '', customCategory: '', description: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ amount: '', category: '', customCategory: '', description: '', tag: '', date: new Date().toISOString().split('T')[0] });
     setShowForm(false);
   };
 
   const startEdit = (tx) => {
-    const builtInCats = tx.type === 'income' ? t.categoriesInc : t.categoriesExp;
-    const isBuiltIn = builtInCats.includes(tx.category);
+    const known = catsFor(tx.type).includes(tx.category);
     setFormType(tx.type);
     setEditingId(tx.id);
-    setFormData({ amount: tx.amount.toString(), category: isBuiltIn ? tx.category : t.categoriesInc[t.categoriesInc.length - 1], customCategory: isBuiltIn ? '' : tx.category, description: tx.description || '', date: tx.date });
+    setFormData({ amount: tx.amount.toString(), category: known ? tx.category : '__new__', customCategory: known ? '' : tx.category, description: tx.description || '', tag: tx.tag || '', date: tx.date });
     setShowForm(true);
     setActiveTab('dashboard');
   };
 
   const deleteTransaction = (id) => setTransactions(transactions.filter(tx => tx.id !== id));
+
+  // ===== ПЛАНЫ И ДОЛГИ =====
+  // Три вида записей: запланированная покупка, мой долг кому-то, чужой долг мне.
+  // Запись висит активной, пока пользователь сам её не закроет.
+  const [todayStr] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const daysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    const a = new Date(todayStr + 'T00:00:00');
+    const b = new Date(dateStr + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  };
+
+  const openPlanForm = (kind) => {
+    setEditingPlanId(null);
+    setPlanData({ kind, what: '', person: '', amount: '', currency, dueDate: '', note: '' });
+    setShowPlanForm(true);
+  };
+
+  const startEditPlan = (plan) => {
+    setEditingPlanId(plan.id);
+    setPlanData({
+      kind: plan.kind,
+      what: plan.what || '',
+      person: plan.person || '',
+      amount: plan.amount != null ? String(plan.amount) : '',
+      currency: plan.currency || currency,
+      dueDate: plan.dueDate || '',
+      note: plan.note || ''
+    });
+    setShowPlanForm(true);
+    setActiveTab('plans');
+  };
+
+  const submitPlan = (e) => {
+    e.preventDefault();
+    const what = planData.what.trim();
+    const person = planData.person.trim();
+    if (!what && !person) return;
+    const amountNum = planData.amount === '' ? null : parseFloat(planData.amount);
+    const payload = {
+      kind: planData.kind,
+      what,
+      person,
+      amount: (amountNum != null && isFinite(amountNum) && amountNum > 0) ? amountNum : null,
+      currency: planData.currency || currency,
+      dueDate: planData.dueDate || '',
+      note: planData.note.trim()
+    };
+    if (editingPlanId) {
+      setPlans(plans.map(pl => pl.id === editingPlanId ? { ...pl, ...payload } : pl));
+    } else {
+      setPlans([...plans, { id: Date.now(), ...payload, done: false, doneAt: null, createdAt: todayStr }]);
+    }
+    setShowPlanForm(false);
+    setEditingPlanId(null);
+    setPlanData({ kind: 'iowe', what: '', person: '', amount: '', currency, dueDate: '', note: '' });
+  };
+
+  // Закрытие записи. Если у неё есть сумма, можно сразу завести настоящую операцию:
+  // отданный долг и покупка — расход, возвращённый мне долг — доход.
+  const closePlan = (plan, createTx) => {
+    if (createTx && plan.amount) {
+      const txType = plan.kind === 'owedme' ? 'income' : 'expense';
+      const label = [plan.what, plan.person].filter(Boolean).join(' · ');
+      setTransactions(prev => [...prev, {
+        id: Date.now(),
+        type: txType,
+        amount: plan.amount,
+        category: t.planTxCategory,
+        description: label.slice(0, 160),
+        currency: plan.currency || currency,
+        date: todayStr,
+        source: 'plan'
+      }]);
+      if (!plan.currencyKnown && plan.currency && !currencies.includes(plan.currency)) {
+        setCurrencies(prev => prev.includes(plan.currency) ? prev : [...prev, plan.currency]);
+      }
+    }
+    setPlans(prev => prev.map(pl => pl.id === plan.id ? { ...pl, done: true, doneAt: todayStr } : pl));
+    setConfirmClosePlanId(null);
+  };
+
+  const reopenPlan = (id) => setPlans(plans.map(pl => pl.id === id ? { ...pl, done: false, doneAt: null } : pl));
+  const deletePlan = (id) => setPlans(plans.filter(pl => pl.id !== id));
+
+  const activePlans = plans.filter(pl => !pl.done)
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return b.id - a.id;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+  const closedPlans = plans.filter(pl => pl.done).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+
+  // Напоминание показываем только по делу: просрочено или срок в ближайшие 7 дней
+  const attentionPlans = activePlans.filter(pl => {
+    const d = daysUntil(pl.dueDate);
+    return d != null && d <= 7;
+  });
+  const overdueCount = activePlans.filter(pl => {
+    const d = daysUntil(pl.dueDate);
+    return d != null && d < 0;
+  }).length;
+
+  const planDueInfo = (pl) => {
+    const d = daysUntil(pl.dueDate);
+    if (d == null) return { text: t.planNoDue, color: c.sec, urgent: false };
+    if (d < 0) return { text: t.planOverdue + ' · ' + pl.dueDate, color: c.expenseColor, urgent: true };
+    if (d === 0) return { text: t.planDueToday, color: '#E67E22', urgent: true };
+    if (d === 1) return { text: t.planDueTomorrow, color: '#E67E22', urgent: true };
+    if (d <= 7) return { text: t.planInDays + ' ' + d + ' ' + t.planDaysShort, color: '#E67E22', urgent: false };
+    return { text: pl.dueDate, color: c.sec, urgent: false };
+  };
+
+  const planKindMeta = (kind) => {
+    if (kind === 'purchase') return { icon: '🛒', label: t.planPurchase, color: c.saveBtn };
+    if (kind === 'owedme') return { icon: '↘️', label: t.planOwedMe, color: c.incomeColor };
+    return { icon: '↗️', label: t.planIOwe, color: c.expenseColor };
+  };
+
+  // Сводка по долгам, сгруппированная по валютам
+  const debtTotals = (kind) => {
+    const map = {};
+    activePlans.filter(pl => pl.kind === kind && pl.amount).forEach(pl => {
+      const cur = pl.currency || currency;
+      map[cur] = (map[cur] || 0) + pl.amount;
+    });
+    return Object.entries(map);
+  };
+
 
   const addCurrency = () => {
     const val = newCurrency.trim().toUpperCase();
@@ -431,46 +1158,60 @@ const App = () => {
   };
 
   // ===== ФИЛЬТР ПО ПЕРИОДУ ДЛЯ ГЛАВНОГО ЭКРАНА =====
+  // Локальная дата в формате YYYY-MM-DD — сравниваем строки, а не объекты Date,
+  // чтобы граница периода не «уезжала» из-за часового пояса.
+  const toIsoDate = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
   const getPeriodRange = (period) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     switch (period) {
       case 'today':
-        return { from: today, label: today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
+        return { fromStr: toIsoDate(today), label: today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
       case 'week': {
         const day = today.getDay() || 7; // Пн=1..Вс=7
         const monday = new Date(today);
         monday.setDate(today.getDate() - (day - 1));
-        return { from: monday, label: monday.toLocaleDateString(language === 'en' ? 'en-GB' : language) + ' — ' + today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
+        return { fromStr: toIsoDate(monday), label: monday.toLocaleDateString(language === 'en' ? 'en-GB' : language) + ' — ' + today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
       }
       case 'month': {
         const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { from: first, label: first.toLocaleDateString(language === 'en' ? 'en-GB' : language, { month: 'long', year: 'numeric' }) };
+        return { fromStr: toIsoDate(first), label: first.toLocaleDateString(language === 'en' ? 'en-GB' : language, { month: 'long', year: 'numeric' }) };
       }
       case 'year': {
         const first = new Date(now.getFullYear(), 0, 1);
-        return { from: first, label: String(now.getFullYear()) };
+        return { fromStr: toIsoDate(first), label: String(now.getFullYear()) };
       }
       case 'all':
       default:
-        return { from: null, label: t.periodAll };
+        return { fromStr: null, label: t.periodAll };
     }
   };
 
-  const { from: periodFrom, label: periodLabel } = getPeriodRange(dashboardPeriod);
+  const { fromStr: periodFromStr, label: periodLabel } = getPeriodRange(dashboardPeriod);
 
   const periodTransactions = transactions.filter(tx => {
     if (tx.currency !== currency) return false;
-    if (periodFrom) {
-      const txDate = new Date(tx.date);
-      if (txDate < periodFrom) return false;
-    }
+    if (periodFromStr && tx.date < periodFromStr) return false;
     return true;
   });
 
   const income = periodTransactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const expense = periodTransactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
   const balance = income - expense;
+
+  // ===== ОСТАТОК, ПЕРЕШЕДШИЙ С ПРОШЛЫХ ПЕРИОДОВ =====
+  // Сальдо всех операций в текущей валюте, совершённых ДО начала выбранного периода.
+  // Показывает, с каким «плюсом» или «минусом» пользователь вошёл в новый месяц/год.
+  const carryOver = periodFromStr
+    ? transactions.reduce((s, tx) => {
+        if (tx.currency !== currency) return s;
+        if (tx.date >= periodFromStr) return s;
+        return s + (tx.type === 'income' ? tx.amount : -tx.amount);
+      }, 0)
+    : 0;
+  const balanceWithCarry = carryOver + balance;
+  const hasCarryData = periodFromStr && transactions.some(tx => tx.currency === currency && tx.date < periodFromStr);
 
   // Данные для круговой/столбчатой диаграммы — расходы по категориям за выбранный период
   const categoryData = {};
@@ -579,24 +1320,198 @@ const App = () => {
     return c.expenseColor;
   };
 
-  const cats = formType === 'income' ? t.categoriesInc : t.categoriesExp;
+  const cats = catsFor(formType);
 
 
-  const allCategories = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)].filter(cat => !['Другое','Boshqa','Other','Diğer'].includes(cat)))];
+  const allCategories = [...new Set([...catsFor('income'), ...catsFor('expense'), ...transactions.map(tx => tx.category)])].filter(Boolean).sort((a, b) => a.localeCompare(b));
 
   const getReportData = () => transactions.filter(tx => {
-    const txDate = new Date(tx.date);
-    const from = filterFrom ? new Date(filterFrom) : null;
-    const to = filterTo ? new Date(filterTo) : null;
-    return (!from || txDate >= from) && (!to || txDate <= to) &&
+    const q = searchText.trim().toLowerCase();
+    const haystack = [tx.description, tx.category, tx.counterparty, tx.card].filter(Boolean).join(' ').toLowerCase();
+    return (!filterFrom || tx.date >= filterFrom) && (!filterTo || tx.date <= filterTo) &&
       (filterType === 'all' || tx.type === filterType) &&
       (!filterCategory || tx.category === filterCategory) &&
+      (!filterTag || (tx.tag || '') === filterTag) &&
+      (!q || haystack.includes(q)) &&
       tx.currency === currency;
   });
 
   const reportData = getReportData();
   const reportIncome = reportData.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const reportExpense = reportData.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+
+  // ===== КУРСЫ ВАЛЮТ И СВОДНЫЙ БАЛАНС =====
+  // Операции всегда хранятся в своей валюте. Курс нужен только чтобы показать
+  // один общий итог: сколько всего денег, если свести всё к базовой валюте.
+  const rateOf = (cur) => {
+    if (cur === baseCurrency) return 1;
+    const r = parseFloat(rates[cur]);
+    return (isFinite(r) && r > 0) ? r : null;
+  };
+
+  const balanceByCurrency = (() => {
+    const map = {};
+    transactions.forEach(tx => {
+      if (!map[tx.currency]) map[tx.currency] = 0;
+      map[tx.currency] += tx.type === 'income' ? tx.amount : -tx.amount;
+    });
+    return map;
+  })();
+
+  const combinedBalance = (() => {
+    let total = 0;
+    const missing = [];
+    Object.entries(balanceByCurrency).forEach(([cur, val]) => {
+      if (Math.abs(val) < 0.0001) return;
+      const r = rateOf(cur);
+      if (r == null) { missing.push(cur); return; }
+      total += val * r;
+    });
+    return { total, missing };
+  })();
+
+  // ===== СВЕРКА С БАНКОМ =====
+  // У операций, попавших из SMS и квитанций, сохранён остаток на карте после операции.
+  // Берём самую свежую такую операцию по каждой карте и смотрим: если к этому остатку
+  // прибавить всё, что мы записали позже, получится ли то, что у нас в базе сейчас.
+  // Расхождение почти всегда означает не внесённую операцию.
+  const reconciliation = (() => {
+    // Группируем операции, у которых банк прислал остаток, по карте и валюте
+    const groups = {};
+    transactions.forEach(tx => {
+      if (!tx.card || tx.balanceAfter == null) return;
+      const key = tx.card + '|' + tx.currency;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ ...tx, stamp: tx.date + ' ' + (tx.time || '00:00') });
+    });
+
+    return Object.entries(groups).map(([key, withBalance]) => {
+      withBalance.sort((a, b) => a.stamp.localeCompare(b.stamp));
+      const first = withBalance[0];
+      const last = withBalance[withBalance.length - 1];
+      const [card, cur] = key.split('|');
+      // Одна точка опоры — сверять не с чем
+      if (withBalance.length < 2) {
+        return { card, currency: cur, bank: last.balanceAfter, date: last.date, time: last.time || '', expected: last.balanceAfter, diff: 0, comparable: false };
+      }
+      // Что должно получиться: остаток на первой точке плюс всё,
+      // что произошло на этой карте после неё и до последней точки включительно
+      const between = transactions.filter(tx => {
+        if (tx.card !== card || tx.currency !== cur) return false;
+        const stamp = tx.date + ' ' + (tx.time || '00:00');
+        return stamp > first.stamp && stamp <= last.stamp;
+      });
+      const delta = between.reduce((acc, tx) => acc + (tx.type === 'income' ? tx.amount : -tx.amount), 0);
+      const expected = first.balanceAfter + delta;
+      const diff = Math.round((last.balanceAfter - expected) * 100) / 100;
+      return { card, currency: cur, bank: last.balanceAfter, date: last.date, time: last.time || '', expected, diff, comparable: true };
+    }).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  })();
+
+  // ===== ЛИМИТЫ ПО КАТЕГОРИЯМ =====
+  const budgetKey = (cur, cat) => cur + '|' + cat;
+  const monthStart = (() => {
+    const n = new Date();
+    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-01';
+  })();
+
+  const budgetRows = Object.entries(budgets)
+    .filter(([key, limit]) => key.startsWith(currency + '|') && parseFloat(limit) > 0)
+    .map(([key, limit]) => {
+      const cat = key.slice(currency.length + 1);
+      const spent = transactions
+        .filter(tx => tx.type === 'expense' && tx.currency === currency && tx.category === cat && tx.date >= monthStart)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+      const lim = parseFloat(limit);
+      return { key, cat, limit: lim, spent, left: lim - spent, pct: Math.min(100, Math.round(spent / lim * 100)) };
+    })
+    .sort((a, b) => b.pct - a.pct);
+
+  // ===== РЕГУЛЯРНЫЕ ПЛАТЕЖИ =====
+  // Считаем платёж «созревшим», если наступил его день месяца, а в этом месяце его ещё не вносили.
+  const currentMonthKey = monthStart.slice(0, 7);
+  const recurringDue = recurring.filter(r => {
+    if (r.lastPosted === currentMonthKey || r.skipped === currentMonthKey) return false;
+    const today = new Date().getDate();
+    return today >= Math.min(28, parseInt(r.day, 10) || 1);
+  });
+
+  const postRecurring = (r) => {
+    setTransactions(prev => [...prev, {
+      id: Date.now(),
+      type: r.type || 'expense',
+      amount: parseFloat(r.amount),
+      category: r.category,
+      description: r.description || '',
+      currency: r.currency,
+      date: new Date().toISOString().split('T')[0],
+      tag: r.tag || '',
+      source: 'recurring'
+    }]);
+    setRecurring(prev => prev.map(x => x.id === r.id ? { ...x, lastPosted: currentMonthKey } : x));
+  };
+
+  const skipRecurring = (r) => setRecurring(prev => prev.map(x => x.id === r.id ? { ...x, skipped: currentMonthKey } : x));
+  const deleteRecurring = (id) => setRecurring(prev => prev.filter(x => x.id !== id));
+
+  // ===== РЕЗЕРВНАЯ КОПИЯ =====
+  const exportBackup = () => {
+    const payload = {
+      app: 'wallet', version: 1, savedAt: new Date().toISOString(),
+      data: { transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'wallet-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setLastBackup(new Date().toISOString().split('T')[0]);
+    setScanNotice(t.backupDone);
+    setTimeout(() => setScanNotice(''), 3000);
+  };
+
+  const importBackup = async (e) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const d = parsed?.data;
+      if (!d || !Array.isArray(d.transactions)) throw new Error('bad');
+      if (!window.confirm(t.backupConfirm)) return;
+      setTransactions(d.transactions);
+      if (d.theme) setTheme(d.theme);
+      if (d.language) setLanguage(d.language);
+      if (d.currency) setCurrency(d.currency);
+      if (Array.isArray(d.currencies)) setCurrencies(d.currencies);
+      if (d.customCats) setCustomCats({ income: d.customCats.income || null, expense: d.customCats.expense || null });
+      if (typeof d.ownerName === 'string') setOwnerName(d.ownerName);
+      if (Array.isArray(d.myCards)) setMyCards(d.myCards);
+      if (Array.isArray(d.plans)) setPlans(d.plans);
+      if (d.rates) setRates(d.rates);
+      if (d.baseCurrency) setBaseCurrency(d.baseCurrency);
+      if (d.budgets) setBudgets(d.budgets);
+      if (Array.isArray(d.recurring)) setRecurring(d.recurring);
+      if (Array.isArray(d.tags)) setTags(d.tags);
+      setScanNotice(t.backupRestored);
+      setTimeout(() => setScanNotice(''), 4000);
+    } catch (err) {
+      setScanError(t.backupBadFile);
+      setTimeout(() => setScanError(''), 6000);
+    }
+  };
+
+  // Напоминание о копии: если её не делали больше 30 дней, а записи есть
+  const backupStale = transactions.length > 5 && (() => {
+    if (!lastBackup) return true;
+    const diff = (new Date() - new Date(lastBackup + 'T00:00:00')) / 86400000;
+    return diff > 30;
+  })();
 
   // ===== МНОГОУРОВНЕВАЯ ЗАЩИТА ОТ ОТКЛЮЧЕНИЯ МОДЕЛЕЙ GOOGLE =====
   // Google периодически отключает старые версии Gemini без долгого предупреждения.
@@ -751,7 +1666,278 @@ const App = () => {
     img.src = URL.createObjectURL(file);
   });
 
-  // ===== РАСПОЗНАВАНИЕ ЧЕКА ЧЕРЕЗ GEMINI VISION =====
+  // ===== СРАВНЕНИЕ ОПЕРАЦИЙ (ЗАЩИТА ОТ ЗАДВОЕНИЯ) =====
+  // Проверяем от обязательных признаков к уточняющим.
+  // Тип, валюта, сумма и дата обязаны совпасть полностью.
+  // Карта, остаток после операции и время — если известны у обеих записей и различаются,
+  // значит это РАЗНЫЕ операции (две покупки на одну сумму в один день — обычное дело).
+  const isSameTx = (a, b) => {
+    // Номер транзакции из квитанции — самый надёжный признак.
+    // Есть у обеих и совпал — это одна операция, других проверок не нужно.
+    // Есть у обеих и разный — это точно разные операции.
+    if (a.ref && b.ref) return a.ref === b.ref;
+
+    if (a.type !== b.type) return false;
+    if ((a.currency || '') !== (b.currency || '')) return false;
+
+    // Одна и та же операция могла попасть в базу без комиссии (из SMS)
+    // и с комиссией (из квитанции) — сравниваем оба варианта суммы.
+    const amountsOf = (x) => [x.amount, x.baseAmount, x.total]
+      .filter(v => typeof v === 'number' && isFinite(v))
+      .map(v => Math.round(v * 100));
+    const av = amountsOf(a), bv = amountsOf(b);
+    if (!av.some(v => bv.includes(v))) return false;
+
+    if (a.date !== b.date) return false;
+    if (a.card && b.card && a.card !== b.card) return false;
+    if (a.balanceAfter != null && b.balanceAfter != null &&
+        Math.round(a.balanceAfter * 100) !== Math.round(b.balanceAfter * 100)) return false;
+    if (a.time && b.time && a.time !== b.time) return false;
+    return true;
+  };
+
+  // Приведение распознанной операции к внутреннему формату + отбраковка мусора
+  const normalizeScannedItem = (raw, fallbackCats) => {
+    const num = (v) => {
+      if (typeof v === 'number') return isFinite(v) ? v : null;
+      if (typeof v !== 'string') return null;
+      const cleaned = v.replace(/\s/g, '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
+      const n = parseFloat(cleaned);
+      return isFinite(n) ? n : null;
+    };
+    const amount = num(raw?.amount);
+    if (!amount || amount <= 0) return null;
+    const type = raw?.type === 'income' ? 'income' : 'expense';
+    const date = typeof raw?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
+      ? raw.date
+      : new Date().toISOString().split('T')[0];
+    const time = typeof raw?.time === 'string' && /^\d{2}:\d{2}$/.test(raw.time) ? raw.time : null;
+    const cardDigits = raw?.card ? String(raw.card).replace(/\D/g, '') : '';
+    const card = cardDigits.length >= 4 ? cardDigits.slice(-4) : null;
+    const currencyVal = typeof raw?.currency === 'string' && /^[A-Za-z]{3}$/.test(raw.currency.trim())
+      ? raw.currency.trim().toUpperCase()
+      : currency;
+    const catList = fallbackCats(type);
+    const category = (typeof raw?.category === 'string' && raw.category.trim())
+      ? raw.category.trim()
+      : catList[catList.length - 1];
+    const feeRaw = num(raw?.fee);
+    const fee = (feeRaw && feeRaw > 0 && type === 'expense') ? feeRaw : 0;
+    const ref = raw?.ref ? String(raw.ref).trim().slice(0, 60) : null;
+    const counterparty = typeof raw?.counterparty === 'string' ? raw.counterparty.trim().slice(0, 60) : '';
+    const exchangedTo = typeof raw?.exchangedTo === 'string' ? raw.exchangedTo.trim().slice(0, 40) : '';
+    // Своя карта с обеих сторон или собственное имя у отправителя и получателя —
+    // это перемещение денег внутри своего кошелька, а не трата.
+    const myLast4 = myCards.map(x => x.last4);
+    const selfTransfer = raw?.selfTransfer === true ||
+      (!!card && !!raw?.counterCard && myLast4.includes(card) && myLast4.includes(String(raw.counterCard).replace(/\D/g, '').slice(-4)));
+    return {
+      type,
+      amount,                      // сумма самой операции, без комиссии
+      fee,                         // комиссия банка, если была
+      total: amount + fee,         // сколько реально ушло со счёта
+      baseAmount: amount,
+      currency: currencyVal,
+      date,
+      time,
+      card,
+      counterCard: raw?.counterCard ? String(raw.counterCard).replace(/\D/g, '').slice(-4) : null,
+      counterparty,
+      ref,
+      exchangedTo,
+      balanceAfter: num(raw?.balanceAfter),
+      description: typeof raw?.description === 'string' ? raw.description.trim().slice(0, 120) : '',
+      category,
+      possibleTransfer: raw?.possibleTransfer === true || selfTransfer,
+      selfTransfer
+    };
+  };
+
+  // Сверяет пачку распознанных операций с базой и между собой,
+  // проставляя каждой статус: новая / дубль / перевод между своими картами.
+  const buildReview = (items) => {
+    const accepted = [];
+    return items.map(item => {
+      const dupInBase = transactions.some(tx => isSameTx(item, tx));
+      const dupInBatch = accepted.some(x => isSameTx(item, x));
+      const isDup = dupInBase || dupInBatch;
+      if (!isDup) accepted.push(item);
+      const status = isDup ? 'dup' : ((item.selfTransfer || item.possibleTransfer) ? 'transfer' : 'new');
+      return { ...item, status, selected: status === 'new' };
+    });
+  };
+
+  // ===== ОФЛАЙН-РАЗБОР ТЕКСТА БАНКОВСКОГО SMS =====
+  // Работает без интернета и без API-ключа: обычные регулярные выражения по формату
+  // узбекских банков. Это основа автоматического приёма — текст может прийти
+  // из буфера обмена, из «Поделиться» или из ссылки, которую пришлёт автоматизация.
+  const SMS_EXPENSE_WORDS = /(spisanie|списание|pokupka|покупка|platezh|платеж|платёж|oplata|оплата|snyatie|снятие|otpravleno|отправлено|perevod s karty|перевод с карты|withdrawal|debit|xarid|yechib)/i;
+  const SMS_INCOME_WORDS = /(popolnenie|пополнение|zachislenie|зачисление|postuplenie|поступление|vozvrat|возврат|refund|credit|zarplata|зарплата|tushum|kirim|perevod na kartu|перевод на карту)/i;
+
+  // Приводит "1 633 421.97" / "501250,00" / "400 000" к числу
+  const parseSmsNumber = (raw) => {
+    if (!raw) return null;
+    let v = String(raw).replace(/\s/g, '');
+    const lastDot = v.lastIndexOf('.');
+    const lastComma = v.lastIndexOf(',');
+    const sep = Math.max(lastDot, lastComma);
+    if (sep > -1 && /^\d{1,2}$/.test(v.slice(sep + 1))) {
+      v = v.slice(0, sep).replace(/[.,]/g, '') + '.' + v.slice(sep + 1);
+    } else {
+      v = v.replace(/[.,]/g, '');
+    }
+    const n = parseFloat(v);
+    return isFinite(n) ? n : null;
+  };
+
+  const parseBankSms = (text) => {
+    if (!text || typeof text !== 'string') return [];
+    const clean = text.replace(/\u00a0/g, ' ').replace(/\r/g, '');
+    // Каждое новое сообщение начинается со слова-маркера — по ним и режем
+    const marker = /(?=(?:spisanie|списание|pokupka|покупка|platezh|платеж|платёж|oplata|оплата|snyatie|снятие|popolnenie|пополнение|zachislenie|зачисление|postuplenie|поступление|vozvrat|возврат|perevod|перевод)\b)/gi;
+    const chunks = clean.split(marker).map(x => x.trim()).filter(x => /summa|сумма/i.test(x));
+    const source = chunks.length ? chunks : [clean];
+    const out = [];
+    source.forEach(chunk => {
+      const amountM = chunk.match(/(?:summa|сумма)\s*[:=]?\s*([\d\s.,]+?)\s*([A-Z]{3}|сум|so'm|сўм)/i);
+      if (!amountM) return;
+      const amount = parseSmsNumber(amountM[1]);
+      if (!amount || amount <= 0) return;
+      let cur = amountM[2].toUpperCase();
+      if (/СУМ|SO'M|СЎМ/i.test(amountM[2])) cur = 'UZS';
+      const balM = chunk.match(/(?:balans|баланс)\s*[:=]?\s*([\d\s.,]+?)\s*([A-Z]{3}|сум|so'm)/i);
+      const cardM = chunk.match(/(?:kart[aи]?|карт[аы]?)\s*[:\s]*[*x•]*\s*(\d{4})\b/i)
+        || chunk.match(/\d{6}\*+(\d{4})\b/)
+        || chunk.match(/[*x•]{2,}\s*(\d{4})\b/);
+      const dtM = chunk.match(/(\d{2})[./-](\d{2})[./-](\d{2,4})[\s,]+(\d{1,2}):(\d{2})/);
+      let date = null, time = null;
+      if (dtM) {
+        const yy = dtM[3].length === 2 ? '20' + dtM[3] : dtM[3];
+        date = yy + '-' + dtM[2] + '-' + dtM[1];
+        time = String(dtM[4]).padStart(2, '0') + ':' + dtM[5];
+      } else {
+        const dM = chunk.match(/(\d{2})[./-](\d{2})[./-](\d{2,4})/);
+        if (dM) {
+          const yy = dM[3].length === 2 ? '20' + dM[3] : dM[3];
+          date = yy + '-' + dM[2] + '-' + dM[1];
+        }
+      }
+      const isIncome = SMS_INCOME_WORDS.test(chunk) && !SMS_EXPENSE_WORDS.test(chunk);
+      // Описание: то, что стоит до даты и до слова summa
+      let desc = chunk.split(/(?:summa|сумма)/i)[0]
+        .replace(/\s+/g, ' ')
+        .replace(/^[^:]{0,24}:\s*/, '')
+        .replace(/\d{2}[./-]\d{2}[./-]\d{2,4}.*$/, '')
+        .replace(/(?:kart[aи]?|карт[аы]?)\s*[:\s]*[*x•\d]*/i, '')
+        .replace(/[,.\s]+$/, '')
+        .trim();
+      if (desc.length > 60) desc = desc.slice(0, 60);
+      out.push({
+        type: isIncome ? 'income' : 'expense',
+        amount,
+        currency: cur,
+        date,
+        time,
+        card: cardM ? cardM[1] : null,
+        balanceAfter: balM ? parseSmsNumber(balM[1]) : null,
+        description: desc,
+        category: null,
+        possibleTransfer: /uzcard to visa|visa to uzcard|p2p|перевод/i.test(chunk)
+      });
+    });
+    return out;
+  };
+
+  // ===== ПОЧТОВЫЙ ЯЩИК: ЗАБРАТЬ НАКОПЛЕННЫЕ SMS С СЕРВЕРА =====
+  // Сервер только передаёт текст. Разбор, сверка с базой и решение, что вносить,
+  // как и раньше происходят здесь, на устройстве.
+  const fetchInbox = async (silent) => {
+    if (!inboxKey || inboxBusy) return;
+    setInboxBusy(true);
+    try {
+      const resp = await fetch('/api/inbox', { headers: { 'x-wallet-key': inboxKey } });
+      if (resp.status === 401) throw new Error('bad-key');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length === 0) {
+        if (!silent) { setScanNotice(t.inboxEmpty); setTimeout(() => setScanNotice(''), 3000); }
+        return;
+      }
+      const raw = items.flatMap(m => parseBankSms(m.text));
+      const normalized = raw.map(x => normalizeScannedItem(x, catsFor)).filter(Boolean);
+      if (normalized.length === 0) {
+        if (!silent) { setScanError(t.inboxNoParse); setTimeout(() => setScanError(''), 6000); }
+        return;
+      }
+      setPendingAckIds(items.map(m => m.id));
+      setImportItems(buildReview(normalized));
+      setActiveTab('dashboard');
+    } catch (err) {
+      if (!silent) {
+        setScanError(err?.message === 'bad-key' ? t.inboxBadKey : t.inboxFail);
+        setTimeout(() => setScanError(''), 6000);
+      }
+    } finally {
+      setInboxBusy(false);
+    }
+  };
+
+  // Подтверждаем серверу, что сообщения разобраны — иначе они придут снова
+  const ackInbox = async (ids) => {
+    const list = ids && ids.length ? ids : pendingAckIds;
+    if (!inboxKey || list.length === 0) return;
+    setPendingAckIds([]);
+    try {
+      await fetch('/api/inbox?action=ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-wallet-key': inboxKey },
+        body: JSON.stringify({ ids: list })
+      });
+    } catch (err) {
+      // не страшно: сообщения просто придут ещё раз, а задвоение отсечёт сверка
+    }
+  };
+
+  // Тихая проверка ящика при запуске приложения
+  useEffect(() => {
+    if (inboxKey) fetchInbox(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inboxKey]);
+
+  // Разбор вставленного или полученного извне текста SMS
+  const handleSmsText = (text) => {
+    const raw = parseBankSms(text);
+    const normalized = raw.map(r => normalizeScannedItem(r, catsFor)).filter(Boolean);
+    if (normalized.length === 0) {
+      setScanError(t.smsFail);
+      setTimeout(() => setScanError(''), 6000);
+      return false;
+    }
+    setImportItems(buildReview(normalized));
+    setShowSmsBox(false);
+    setSmsText('');
+    setActiveTab('dashboard');
+    return true;
+  };
+
+  // Приём текста извне: ?sms=... или ?text=... (Web Share Target, ярлык, автоматизация)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const incoming = params.get('sms') || params.get('text');
+    const quick = params.get('quick');
+    if (incoming) {
+      handleSmsText(incoming);
+    } else if (quick === 'expense' || quick === 'income') {
+      setFormType(quick);
+      setEditingId(null);
+      setShowForm(true);
+    }
+    if (incoming || quick) window.history.replaceState({}, '', window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ===== РАСПОЗНАВАНИЕ ЧЕКА ИЛИ БАНКОВСКОЙ ВЫПИСКИ ЧЕРЕЗ GEMINI VISION =====
   const handleReceiptUpload = async (e) => {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = '';
@@ -766,55 +1952,95 @@ const App = () => {
     setScanNotice('');
     try {
       const base64 = await compressImage(file);
-      const knownCats = [...new Set([...t.categoriesExp, ...transactions.filter(tx => tx.type === 'expense').map(tx => tx.category)])].filter(x => !['Другое','Boshqa','Other','Diğer'].includes(x));
-      const prompt = `Ты OCR финансового приложения. Проанализируй фотографию чека и извлеки данные.
+      const knownCats = [...new Set([...catsFor('expense'), ...transactions.filter(tx => tx.type === 'expense').map(tx => tx.category)])].filter(Boolean);
+      const knownCatsInc = [...new Set([...catsFor('income'), ...transactions.filter(tx => tx.type === 'income').map(tx => tx.category)])].filter(Boolean);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const langWord = language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe';
 
-ВАЖНО: Чек может быть мятым, скомканным, снятым под углом, с тенями от складок или бликами. Внимательно ищи текст в разных областях. Если строка искривлена из-за складки — восстанови её мысленно.
+      const myCardsLine = myCards.length
+        ? myCards.map(mc => '***' + mc.last4 + (mc.label ? ' (' + mc.label + ')' : '')).join(', ')
+        : '(пользователь их не указал)';
+      const ownerLine = ownerName ? ownerName : '(пользователь его не указал)';
 
-Пошагово выполни:
+      const statementPrompt = `Ты OCR финансового приложения. На изображении может быть ЛЮБОЙ из этих документов:
 
-ШАГ 1 — НАЙДИ ИТОГОВУЮ СУММУ:
-- Ищи метки: "ИТОГО", "К ОПЛАТЕ", "ВСЕГО", "СУММА", "TOTAL", "TO PAY", "AMOUNT", "JAMI", "UMUMIY", "TO'LOV", "JAMI SUMMA"
-- Возле метки будет число — это и есть amount
-- Если сумма встречается на чеке несколько раз (промежуточная и итоговая) — выбирай ту, что помечена как ИТОГО, или наибольшую из финальной части чека
-- НЕ путай итог с ценами отдельных товаров или НДС
+(A) бумажный кассовый чек — одна покупка;
+(B) скриншот SMS от банка или список push-уведомлений — НЕСКОЛЬКО операций;
+(C) экран истории/отчётов банковского приложения (Kapitalbank, Hamkorbank, Ipoteka, Aloqabank, Uzum, Anor, TBC) — несколько операций, иногда с раскрытой карточкой детали внизу;
+(D) квитанция об одной операции: перевод с карты на карту, p2p, оплата услуги, покупка, обмен валюты;
+(E) электронный чек платёжного сервиса (alif, Payme, Click, Uzum Bank) со строками «Сумма», «Комиссия», «Итого».
 
-ШАГ 2 — НАЙДИ ДАТУ:
-- Обычно в шапке или в подвале чека
-- Форматы: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, DD-MM-YY
-- Переведи в формат YYYY-MM-DD
-- Если чек за 2024 или ранее — не путай с сегодняшним годом
+Определи тип и извлеки ВСЕ операции, которые реально видны.
 
-ШАГ 3 — ОПРЕДЕЛИ ВАЛЮТУ:
-- "сум", "сумов", "so'm", "UZS" → UZS
-- "$", "USD", "долларов" → USD
-- "€", "EUR", "евро" → EUR
-- "₽", "руб", "рублей", "RUB" → RUB
-- Если валюта не указана явно, но чек узбекский — UZS
+===== ДАННЫЕ ПОЛЬЗОВАТЕЛЯ (для определения направления денег) =====
+Имя владельца на картах: ${ownerLine}
+Его собственные карты (последние 4 цифры): ${myCardsLine}
 
-ШАГ 4 — ОПРЕДЕЛИ ЧТО КУПЛЕНО (description):
-- 3-8 слов о содержимом. Примеры:
-  * "Бензин АИ-95, 38.5 л" (одна позиция)
-  * "Продукты, Korzinka" (много позиций → тема + магазин)
-  * "Лекарства, Dori-Darmon"
-  * "Обед, ресторан Bosh Osh"
-- Не включай сумму, валюту, дату
+Правила направления:
+- Списание с карты пользователя чужому человеку или магазину → type "expense".
+- Зачисление на карту пользователя от кого-то другого → type "income".
+- Если имя отправителя и имя получателя СОВПАДАЮТ (это один человек), либо обе карты принадлежат
+  пользователю — это перемещение внутри своего кошелька: поставь "selfTransfer": true.
+  Такая операция не является ни расходом, ни доходом, пользователь решит сам.
+- Если своих карт и имени не указано — опирайся только на текст и ставь selfTransfer лишь при явном
+  совпадении имён отправителя и получателя.
 
-ШАГ 5 — ПОДБЕРИ КАТЕГОРИЮ:
-- Известные категории: ${JSON.stringify(knownCats)}
-- Правила: бензин/АЗС → "${t.categoriesExp[4]}", продукты/супермаркет → "${t.categoriesExp[0]}", коммуналка → "${t.categoriesExp[1]}", кафе/ресторан → "${t.categoriesExp[6]}", одежда/техника → "${t.categoriesExp[7]}"
-- Если не подходит ни одна известная — предложи новую одним словом
+===== СЛОВА-МАРКЕРЫ =====
+РАСХОД: "Spisanie", "Списание", "Pokupka", "Покупка", "Platezh", "Платёж", "Oplata", "Оплата",
+"Snyatie", "Снятие", "Perevod s karty", "Перевод с карты", "Перевод на карту" (если отправитель — пользователь),
+"p2p перевод", "Otpravleno", "Withdrawal", "Debit", "Xarid", "Yechib olindi", "Продается"/"Продаётся" при обмене валюты.
+ПРИХОД: "Popolnenie", "Пополнение", "Zachislenie", "Зачисление", "Postuplenie", "Поступление",
+"Vozvrat", "Возврат", "Refund", "Credit", "Zarplata", "Tushum", "Kirim", "Покупается" при обмене валюты (если это ваша вторая карта — см. selfTransfer).
 
-Все текстовые поля возвращай на языке: ${language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe'}.
-Если данные нечитаемы даже после внимательного анализа — используй null для соответствующего поля.
+===== РАЗБОР ПОЛЕЙ =====
+- amount: сумма САМОЙ операции, без комиссии. "summa:501250.00 UZS" → 501250. "74 000 сум" → 74000. "22.4 USD" → 22.4.
+  Точка и запятая внутри числа — десятичный разделитель; пробел — разделитель разрядов.
+- fee: комиссия, если она выделена отдельной строкой ("Комиссия", "Komissiya", "Fee"). "Комиссия 333 сум" → 333.
+  Если строка «Итого» = сумма + комиссия, всё равно возвращай amount = сумма, fee = комиссия. НЕ складывай их сам.
+- currency: берётся из текста рядом с суммой — UZS ("сум", "so'm", "UZS"), USD ("$", "USD"), EUR, RUB. Не угадывай.
+- date / time: форматы DD.MM.YYYY, DD.MM.YY, DD/MM/YYYY, "06.09.2026 12:08", "15.09.26 23:22", "16 сентября".
+  Приводи к date "YYYY-MM-DD" и time "HH:MM". Двузначный год: 26 → 2026. Сегодня ${todayStr}, дата не может быть в будущем.
+  Если на экране истории дата стоит заголовком группы ("16 сентября"), применяй её ко всем операциям под этим заголовком.
+- card: карта, С КОТОРОЙ списано (или НА которую зачислено) у пользователя. Только последние 4 цифры.
+  Маски бывают разные: "***4283", "karta ***4283", "561468******4283", "4278 32** **** 1515" → бери последние 4 цифры: "4283", "1515".
+- counterCard: карта второй стороны (получатель при списании, отправитель при зачислении), тоже последние 4 цифры, иначе null.
+- counterparty: имя второй стороны, как напечатано ("KAMERTSEL J.", "NEMATILLOYEVA S."), иначе "".
+- ref: "Номер транзакции", "Номер операции", "Transaction ID", "Chek raqami" — строкой, как есть. Это уникальный
+  идентификатор операции, он критически важен. Если его нет — null.
+- balanceAfter: остаток на карте ПОСЛЕ операции ("balans:1633421.97 UZS"). Это НЕ сумма операции. Если нет — null.
+- description: магазин, терминал, услуга, назначение — коротко, до 8 слов, без суммы и даты.
+  "ANTHROPIC* CLAUDE SUB", "UZCARD TO VISA", "HAMKORBANK ATB", "OOO ATTO TOLOV".
+- exchangedTo: только для обмена валюты. Если видно "Продается 14 USD" и "Покупается 164 780 UZS",
+  то amount=14, currency="USD", exchangedTo="164 780 UZS". Иначе "".
+- possibleTransfer: true для "UZCARD TO VISA", "VISA TO UZCARD", "p2p", переводов между картами, обмена валюты.
+
+===== ТОЧНОСТЬ ВАЖНЕЕ ПОЛНОТЫ =====
+- НЕ ВЫДУМЫВАЙ операции. Только то, у чего реально видна сумма.
+- Обрезано краем экрана, сумма или дата не читаются — ПРОПУСТИ запись целиком.
+- Одно и то же попало в кадр дважды (например, строка в списке и её же раскрытая карточка внизу экрана) — верни ОДИН раз,
+  взяв более подробный вариант.
+- Не путай "balans" с "summa", "Комиссия" с "Итого", сумму операции с остатком на счёте.
+- Игнорируй рекламные баннеры, кнопки, номера телефонов поддержки и номера лицензий — это не операции.
+- Каждая операция — отдельный объект, даже при одинаковых суммах: различай их по времени, номеру и остатку.
+
+===== КАТЕГОРИЯ =====
+Расходы выбирай из: ${JSON.stringify(knownCats)}
+Доходы выбирай из: ${JSON.stringify(knownCatsInc)}
+Смысловые ориентиры: АЗС, ATTO, метро, такси → транспорт; супермаркет, Korzinka, Makro → продукты;
+свет, газ, вода → коммунальные; Ucell, Beeline, Uzmobile, интернет-провайдер → связь и интернет;
+кафе, ресторан, доставка еды → развлечения или питание; онлайн-подписки и сервисы (ANTHROPIC, Google, Netflix) → подписки;
+маркетплейсы, одежда, техника → покупки.
+Если ни одна не подходит — предложи свою одним-двумя словами.
+
+Все текстовые поля возвращай на языке: ${langWord}.
 
 Верни СТРОГО JSON без markdown:
-{"amount": число_без_разделителей, "date": "YYYY-MM-DD" или null, "currency": "UZS"|"USD"|"EUR"|"RUB" или null, "description": "..." или null, "category": "..." или null}`;
+{"kind":"receipt" или "statement","items":[{"type":"expense" или "income","amount":число,"fee":число или 0,"currency":"UZS","date":"YYYY-MM-DD","time":"HH:MM" или null,"card":"4283" или null,"counterCard":"1214" или null,"counterparty":"...","ref":"..." или null,"balanceAfter":число или null,"exchangedTo":"","description":"...","category":"...","possibleTransfer":false,"selfTransfer":false}]}`;
 
-      const raw = await callGeminiChain({
+      const rawStatement = await callGeminiChain({
         contents: [{ parts: [
           { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-          { text: prompt }
+          { text: statementPrompt }
         ]}],
         generationConfig: {
           responseMimeType: 'application/json',
@@ -822,47 +2048,102 @@ const App = () => {
           thinkingConfig: { thinkingBudget: 2048 }
         }
       });
-      let jsonText = String(raw).trim();
-      if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-      const parsed = JSON.parse(jsonText);
-      const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
-      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
-      if (!amount || isNaN(amount)) throw new Error('no-amount-found');
-      if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
-      const langCats = t.categoriesExp;
-      let categoryValue = '';
-      let customCategoryValue = '';
-      if (parsed.category && langCats.includes(parsed.category)) {
-        categoryValue = parsed.category;
-      } else if (parsed.category) {
-        categoryValue = langCats[langCats.length - 1]; // «Другое»
-        customCategoryValue = parsed.category;
+      let stText = String(rawStatement).trim();
+      if (stText.startsWith('```')) stText = stText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+      const stParsed = JSON.parse(stText);
+      const rawItems = Array.isArray(stParsed?.items) ? stParsed.items : [];
+      const fallbackCats = (type) => catsFor(type);
+      const normalized = rawItems.map(r => normalizeScannedItem(r, fallbackCats)).filter(Boolean);
+
+      if (normalized.length === 0) throw new Error('no-amount-found');
+
+      // Одна операция с бумажного чека — привычное поведение: сразу подставляем в форму
+      if (normalized.length === 1 && stParsed?.kind !== 'statement') {
+        const only = normalized[0];
+        if (only.currency && currencies.includes(only.currency)) setCurrency(only.currency);
+        const langCats = fallbackCats(only.type);
+        const isKnown = langCats.includes(only.category);
+        setFormType(only.type);
+        setEditingId(null);
+        setFormData({
+          amount: String(only.total ?? only.amount),
+          category: isKnown ? only.category : '__new__',
+          customCategory: isKnown ? '' : only.category,
+          description: only.description || '',
+          date: only.date
+        });
+        setShowForm(true);
+        setActiveTab('dashboard');
+        setScanNotice(t.recognized);
+        setTimeout(() => setScanNotice(''), 4000);
+        return;
       }
-      setFormType('expense');
-      setEditingId(null);
-      setFormData({
-        amount: String(amount),
-        category: categoryValue,
-        customCategory: customCategoryValue,
-        description: parsed.description || '',
-        date
-      });
-      setShowForm(true);
+
+      // Выписка: сверяем каждую операцию с уже внесёнными и между собой внутри пачки
+      setImportItems(buildReview(normalized));
       setActiveTab('dashboard');
-      setScanNotice(t.recognized);
-      setTimeout(() => setScanNotice(''), 4000);
     } catch (err) {
       console.error('OCR error', err);
       const msg = err?.message || '';
       let userMsg = t.scanFailed;
       if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
       else if (/network|failed to fetch|load failed/i.test(msg)) userMsg = t.scanFailedNetwork;
-      else if (msg === 'no-amount-found') userMsg = t.scanFailed;
+      else if (msg === 'no-amount-found') userMsg = t.importNothing;
       setScanError(userMsg + (msg ? ' [' + msg.slice(0, 90) + ']' : ''));
       setTimeout(() => setScanError(''), 8000);
     } finally {
       setScanning(false);
     }
+  };
+
+  // Изменение одной строки в окне подтверждения импорта
+  const updateImportItem = (idx, patch) => {
+    setImportItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, ...patch } : it) : prev);
+  };
+
+  // Внесение отмеченных операций в базу
+  const confirmImport = () => {
+    const chosen = (importItems || []).filter(i => i.selected);
+    if (chosen.length === 0) {
+      setImportItems(null);
+      ackInbox();
+      setScanError(t.importNoneSelected);
+      setTimeout(() => setScanError(''), 4000);
+      return;
+    }
+    const base = Date.now();
+    const newTx = chosen.map((i, idx) => {
+      const parts = [i.description, i.counterparty].filter(Boolean);
+      if (i.exchangedTo) parts.push(t.importExchange + ' ' + i.exchangedTo);
+      if (i.fee > 0) parts.push(t.importFee + ' ' + i.fee.toLocaleString());
+      return {
+        id: base + idx,
+        type: i.type,
+        amount: i.total,          // списанная сумма с учётом комиссии
+        baseAmount: i.baseAmount, // сумма без комиссии — нужна для сверки с SMS
+        fee: i.fee || 0,
+        category: i.category,
+        description: [...new Set(parts)].join(' · ').slice(0, 160),
+        currency: i.currency,
+        date: i.date,
+        time: i.time || null,
+        card: i.card || null,
+        counterCard: i.counterCard || null,
+        ref: i.ref || null,
+        balanceAfter: i.balanceAfter ?? null,
+        source: 'import'
+      };
+    });
+    const unknownCurrencies = [...new Set(newTx.map(x => x.currency))].filter(cur => !currencies.includes(cur));
+    if (unknownCurrencies.length) setCurrencies([...currencies, ...unknownCurrencies]);
+    // Новые категории из квитанций запоминаем, чтобы они были под рукой при ручном вводе
+    chosen.forEach(i => { if (i.category) addCategory(i.type, i.category); });
+    setTransactions([...transactions, ...newTx]);
+    setImportItems(null);
+    ackInbox();
+    const hasOtherCurrency = newTx.some(x => x.currency !== currency);
+    setScanNotice(t.importAdded + ': ' + newTx.length + (hasOtherCurrency ? '. ' + t.importOtherCurrency : ''));
+    setTimeout(() => setScanNotice(''), hasOtherCurrency ? 9000 : 4000);
   };
 
   // ===== ГОЛОСОВОЙ ВВОД =====
@@ -909,7 +2190,7 @@ const App = () => {
   const parseVoiceText = async (text) => {
     setScanning(true);
     try {
-      const knownCats = [...new Set([...t.categoriesInc, ...t.categoriesExp, ...transactions.map(tx => tx.category)])].filter(x => !['Другое','Boshqa','Other','Diğer'].includes(x));
+      const knownCats = [...new Set([...catsFor('income'), ...catsFor('expense'), ...transactions.map(tx => tx.category)])].filter(Boolean);
       const today = new Date().toISOString().split('T')[0];
       const prompt = `Ты парсер фраз финансового приложения. Разбери фразу пользователя.
 
@@ -943,13 +2224,13 @@ const App = () => {
       const txType = parsed.type === 'income' ? 'income' : 'expense';
       const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
       if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
-      const langCats = txType === 'income' ? t.categoriesInc : t.categoriesExp;
+      const langCats = catsFor(txType);
       let categoryValue = '';
       let customCategoryValue = '';
       if (parsed.category && langCats.includes(parsed.category)) {
         categoryValue = parsed.category;
       } else if (parsed.category) {
-        categoryValue = langCats[langCats.length - 1]; // «Другое»
+        categoryValue = '__new__';
         customCategoryValue = parsed.category;
       }
       setFormType(txType);
@@ -1141,6 +2422,7 @@ ${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString(
       setTimeout(() => setAiAnalysisError(''), 5000);
       return;
     }
+    setAiExpanded(true);
     setAiAnalysisLoading(true);
     setAiAnalysisError('');
     try {
@@ -1240,6 +2522,10 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     setGroqKey(groqVal);
     if (groqVal) localStorage.setItem('walletGroqKey', groqVal);
     else localStorage.removeItem('walletGroqKey');
+    const inbVal = tempInboxKey.trim();
+    setInboxKey(inbVal);
+    if (inbVal) localStorage.setItem('walletInboxKey', inbVal);
+    else localStorage.removeItem('walletInboxKey');
     const orVal = tempOrKey.trim();
     setOrKey(orVal);
     if (orVal) localStorage.setItem('walletOrKey', orVal);
@@ -1257,7 +2543,8 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
       [t.category]: tx.category,
       [t.description]: tx.description || '',
       [t.amount]: tx.amount,
-      'Валюта': tx.currency
+      'Валюта': tx.currency,
+      [t.importCard]: tx.card ? '***' + tx.card : ''
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -1275,7 +2562,8 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
       [t.category]: tx.category,
       [t.description]: tx.description || '',
       [t.amount]: tx.amount,
-      'Валюта': tx.currency
+      'Валюта': tx.currency,
+      [t.importCard]: tx.card ? '***' + tx.card : ''
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -1390,7 +2678,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
   const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, boxSizing: 'border-box', fontSize: '14px' };
   const chartTabStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: active ? c.saveBtn : c.card, color: active ? '#FFF' : c.text, cursor: 'pointer', fontWeight: active ? 500 : 400 });
-  const tabStyle = (active) => ({ flex: 1, padding: '12px', fontSize: '14px', border: 'none', borderRadius: '8px', backgroundColor: active ? c.tabActive : 'transparent', color: active ? c.tabText : c.sec, cursor: 'pointer', fontWeight: active ? 600 : 400 });
+  const tabStyle = (active) => ({ flex: 1, padding: '11px 4px', fontSize: '13px', border: 'none', borderRadius: '8px', backgroundColor: active ? c.tabActive : 'transparent', color: active ? c.tabText : c.sec, cursor: 'pointer', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' });
   const periodBtnStyle = (active) => ({ flex: 1, padding: '8px 6px', fontSize: '12px', border: '1px solid ' + c.border, borderRadius: '8px', backgroundColor: active ? c.tabActive : c.card, color: active ? c.tabText : c.text, cursor: 'pointer', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' });
 
   return (
@@ -1415,7 +2703,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
               <option value="__add__">{t.addCurrency}</option>
             </select>
-            <button onClick={() => { setTempKey(geminiKey); setTempGroqKey(groqKey); setTempOrKey(orKey); setShowSettings(!showSettings); }} title={t.settings} style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: showSettings ? c.saveBtn : c.card, color: showSettings ? '#fff' : c.text, cursor: 'pointer', fontSize: '13px' }}>⚙️</button>
+            <button onClick={() => { setTempKey(geminiKey); setTempGroqKey(groqKey); setTempOrKey(orKey); setTempInboxKey(inboxKey); setShowSettings(!showSettings); }} title={t.settings} style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: showSettings ? c.saveBtn : c.card, color: showSettings ? '#fff' : c.text, cursor: 'pointer', fontSize: '13px' }}>⚙️</button>
           </div>
         </div>
 
@@ -1444,6 +2732,173 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 {t.orKeyHint} <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: c.saveBtn, textDecoration: 'underline' }}>{t.getOrKey}</a>
               </div>
             </div>
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.ownerNameLabel}</label>
+              <input type="text" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder={t.ownerNamePlaceholder} style={{ ...inputStyle, marginBottom: '6px' }} autoComplete="off" />
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '14px', lineHeight: '1.5' }}>{t.ownerNameHint}</div>
+
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.myCardsLabel}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.myCardsHint}</div>
+              {myCards.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {myCards.map(mc => (
+                    <span key={mc.last4} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 9px', fontSize: '12px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
+                      ***{mc.last4}{mc.label ? ' · ' + mc.label : ''}
+                      <button onClick={() => setMyCards(myCards.filter(x => x.last4 !== mc.last4))} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: 0, lineHeight: 1 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '4px' }}>
+                <input type="text" inputMode="numeric" value={newCardDigits} maxLength={4} onChange={(e) => setNewCardDigits(e.target.value.replace(/\D/g, ''))} placeholder={t.myCardsDigits} style={{ ...inputStyle, width: '92px', flex: '0 0 auto' }} />
+                <input type="text" value={newCardLabel} onChange={(e) => setNewCardLabel(e.target.value)} placeholder={t.myCardsName} style={{ ...inputStyle, flex: 1 }} />
+                <button
+                  onClick={() => {
+                    if (newCardDigits.length !== 4 || myCards.some(x => x.last4 === newCardDigits)) return;
+                    setMyCards([...myCards, { last4: newCardDigits, label: newCardLabel.trim() }]);
+                    setNewCardDigits(''); setNewCardLabel('');
+                  }}
+                  style={{ padding: '10px 14px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
+                >{t.catAdd}</button>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px', marginBottom: '14px' }}>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '13px' }}>{t.catManage}</h4>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>{t.catManageHint}</div>
+
+              {['expense', 'income'].map(kind => (
+                <div key={kind} style={{ marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: kind === 'income' ? c.incomeColor : c.expenseColor }}>
+                      {kind === 'income' ? t.catIncomeTitle : t.catExpenseTitle}
+                    </span>
+                    {(kind === 'income' ? customCats.income : customCats.expense) && (
+                      <button onClick={() => resetCategories(kind)} style={{ padding: '3px 9px', fontSize: '10px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.catReset}</button>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                    {catsFor(kind).map(cat => (
+                      <span key={cat} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 9px', fontSize: '12px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
+                        <span
+                          onClick={() => {
+                            const next = window.prompt(t.catRenameTitle, cat);
+                            if (next !== null) renameCategory(kind, cat, next);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                          title={t.catRenameTitle}
+                        >{cat}</span>
+                        <button
+                          onClick={() => { if (window.confirm(t.catDeleteConfirm)) removeCategory(kind, cat); }}
+                          style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: 0, lineHeight: 1 }}
+                        >✕</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      type="text"
+                      value={newCatName[kind]}
+                      onChange={(e) => setNewCatName({ ...newCatName, [kind]: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (addCategory(kind, newCatName[kind])) setNewCatName({ ...newCatName, [kind]: '' }); } }}
+                      placeholder={t.catAddPlaceholder}
+                      style={{ ...inputStyle, flex: 1 }}
+                    />
+                    <button
+                      onClick={() => { if (addCategory(kind, newCatName[kind])) setNewCatName({ ...newCatName, [kind]: '' }); }}
+                      style={{ padding: '10px 14px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
+                    >{t.catAdd}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.inboxTitle}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.inboxHint}</div>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '11px', color: c.sec }}>{t.inboxKeyLabel}</label>
+              <input
+                type="text" value={tempInboxKey} onChange={(e) => setTempInboxKey(e.target.value)}
+                placeholder={t.inboxKeyPlaceholder}
+                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px' }}
+                autoComplete="off" spellCheck="false"
+              />
+              <button
+                onClick={() => fetchInbox(false)}
+                disabled={!inboxKey || inboxBusy}
+                style={{ width: '100%', padding: '10px', fontSize: '12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: inboxKey ? c.saveBtn : c.sec, cursor: (inboxKey && !inboxBusy) ? 'pointer' : 'default', marginBottom: '8px' }}
+              >
+                {inboxBusy ? t.inboxChecking : '↻ ' + t.inboxCheck}
+              </button>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '4px', lineHeight: '1.5' }}>{t.inboxPrivacy}</div>
+            </div>
+
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.backupTitle}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '10px', lineHeight: '1.5' }}>{t.backupHint}</div>
+              <div style={{ fontSize: '11px', color: backupStale ? c.expenseColor : c.sec, marginBottom: '8px' }}>
+                {t.backupLast}: {lastBackup || t.backupNever}
+              </div>
+              <input ref={backupInputRef} type="file" accept="application/json,.json" onChange={importBackup} style={{ display: 'none' }} />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                <button onClick={exportBackup} style={{ flex: 1, minWidth: '140px', padding: '10px', fontSize: '12px', borderRadius: '8px', border: 'none', backgroundColor: c.incomeColor, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>⬇ {t.backupExport}</button>
+                <button onClick={() => backupInputRef.current?.click()} style={{ flex: 1, minWidth: '140px', padding: '10px', fontSize: '12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.text, cursor: 'pointer' }}>⬆ {t.backupImport}</button>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.ratesTitle}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '10px', lineHeight: '1.5' }}>{t.ratesHint}</div>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '11px', color: c.sec }}>{t.ratesBase}</label>
+              <select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} style={{ ...inputStyle, marginBottom: '10px' }}>
+                {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+              </select>
+              {currencies.filter(cur => cur !== baseCurrency).map(cur => (
+                <div key={cur} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
+                  <span style={{ fontSize: '12px', minWidth: '78px' }}>1 {cur} =</span>
+                  <input
+                    type="number" inputMode="decimal" step="any" min="0"
+                    value={rates[cur] ?? ''}
+                    onChange={(e) => setRates({ ...rates, [cur]: e.target.value })}
+                    placeholder="0"
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <span style={{ fontSize: '12px', minWidth: '42px', color: c.sec }}>{baseCurrency}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px', marginBottom: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.tagsManage}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.tagsHint}</div>
+              {tags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {tags.map(tg => (
+                    <span key={tg} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 9px', fontSize: '12px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
+                      {tg}
+                      <button onClick={() => setTags(tags.filter(x => x !== tg))} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: 0, lineHeight: 1 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text" value={newTagName} onChange={(e) => setNewTagName(e.target.value)}
+                  placeholder={t.tagPlaceholder} style={{ ...inputStyle, flex: 1 }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const v = newTagName.trim();
+                    if (v && !tags.includes(v)) { setTags([...tags, v]); setNewTagName(''); }
+                  }}
+                />
+                <button
+                  onClick={() => { const v = newTagName.trim(); if (v && !tags.includes(v)) { setTags([...tags, v]); setNewTagName(''); } }}
+                  style={{ padding: '10px 14px', fontSize: '12px', borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer' }}
+                >{t.catAdd}</button>
+              </div>
+            </div>
+
             <button onClick={saveGeminiKey} style={{ width: '100%', padding: '10px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>{t.saveKey}</button>
           </div>
         )}
@@ -1459,8 +2914,156 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
         <div style={{ display: 'flex', gap: '4px', backgroundColor: c.card, padding: '4px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
           <button onClick={() => setActiveTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
           <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
+          <button onClick={() => setActiveTab('plans')} style={{ ...tabStyle(activeTab === 'plans'), position: 'relative' }}>
+            {t.plans}
+            {overdueCount > 0 && activeTab !== 'plans' && (
+              <span style={{ position: 'absolute', top: '5px', right: '7px', minWidth: '16px', height: '16px', borderRadius: '8px', backgroundColor: c.expenseColor, color: '#fff', fontSize: '10px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                {overdueCount}
+              </span>
+            )}
+          </button>
           <button onClick={() => setActiveTab('assistant')} style={tabStyle(activeTab === 'assistant')}>{t.assistant}</button>
         </div>
+
+        {importItems && (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <div style={{ backgroundColor: c.bg, color: c.text, width: '100%', maxWidth: '640px', maxHeight: '92vh', borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column', border: '1px solid ' + c.border }}>
+
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid ' + c.border, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: '15px' }}>{t.importTitle}</h3>
+                  <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px' }}>
+                    {t.importFound}: <b>{importItems.length}</b>
+                    {' · '}<span style={{ color: c.incomeColor }}>{t.importNew}: {importItems.filter(i => i.status === 'new').length}</span>
+                    {importItems.some(i => i.status === 'dup') && <>{' · '}{t.importDup}: {importItems.filter(i => i.status === 'dup').length}</>}
+                  </div>
+                </div>
+                <button onClick={() => { setImportItems(null); ackInbox(); }} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '20px', padding: 0, lineHeight: 1 }}>✕</button>
+              </div>
+
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid ' + c.border, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setImportItems(importItems.map(i => ({ ...i, selected: i.status === 'new' })))}
+                  style={{ padding: '6px 11px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer' }}
+                >{t.importSelectAllNew}</button>
+                <button
+                  onClick={() => setImportItems(importItems.map(i => ({ ...i, selected: false })))}
+                  style={{ padding: '6px 11px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer' }}
+                >{t.importClearAll}</button>
+              </div>
+
+              <div style={{ overflowY: 'auto', padding: '12px 14px', flex: 1 }}>
+                {importItems.some(i => i.status === 'dup') && (
+                  <div style={{ fontSize: '11px', color: c.sec, lineHeight: '1.5', marginBottom: '10px', padding: '8px 10px', borderRadius: '8px', backgroundColor: c.card, border: '1px solid ' + c.border }}>
+                    {t.importDupHint}
+                  </div>
+                )}
+
+                {importItems.map((it, idx) => {
+                  const catOptions = [...new Set([...(it.type === 'income' ? t.categoriesInc : t.categoriesExp), it.category])];
+                  const statusColor = it.status === 'new' ? c.incomeColor : it.status === 'transfer' ? '#E67E22' : c.sec;
+                  const statusText = it.status === 'new' ? t.importNew
+                    : it.status === 'transfer' ? (it.selfTransfer ? t.importSelfTransfer : t.importTransfer)
+                    : t.importDup;
+                  return (
+                    <div key={idx} style={{
+                      display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '8px',
+                      padding: '10px 11px', borderRadius: '10px',
+                      backgroundColor: c.card,
+                      border: '1px solid ' + (it.selected ? c.saveBtn : c.border),
+                      opacity: it.status === 'dup' && !it.selected ? 0.5 : 1
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={it.selected}
+                        onChange={(e) => updateImportItem(idx, { selected: e.target.checked })}
+                        style={{ width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+                          <span style={{ fontSize: '11px', color: c.sec }}>
+                            {it.date}{it.time ? ' · ' + it.time : ''}{it.card ? ' · ' + t.importCard + ' ***' + it.card : ''}
+                          </span>
+                          <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: it.type === 'income' ? c.incomeColor : c.expenseColor }}>
+                              {it.type === 'income' ? '+' : '−'}{(it.total ?? it.amount).toLocaleString()} {it.currency}
+                            </span>
+                            {it.fee > 0 && (
+                              <span style={{ display: 'block', fontSize: '10px', color: c.sec, marginTop: '2px' }}>
+                                {it.amount.toLocaleString()} + {t.importFee} {it.fee.toLocaleString()}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        {(it.description || it.counterparty) && (
+                          <div style={{ fontSize: '12px', marginTop: '4px', wordBreak: 'break-word', lineHeight: '1.4' }}>
+                            {[it.description, it.counterparty].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+
+                        {it.exchangedTo && (
+                          <div style={{ fontSize: '11px', marginTop: '3px', color: c.saveBtn }}>
+                            ⇄ {t.importExchange} {it.exchangedTo}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '7px', flexWrap: 'wrap' }}>
+                          <select
+                            value={it.type}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              const list = newType === 'income' ? t.categoriesInc : t.categoriesExp;
+                              const keepCat = list.includes(it.category) ? it.category : list[list.length - 1];
+                              updateImportItem(idx, { type: newType, category: keepCat });
+                            }}
+                            style={{ padding: '4px 6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, cursor: 'pointer' }}
+                          >
+                            <option value="expense">{t.expense}</option>
+                            <option value="income">{t.income}</option>
+                          </select>
+                          <select
+                            value={it.category}
+                            onChange={(e) => updateImportItem(idx, { category: e.target.value })}
+                            style={{ padding: '4px 6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, cursor: 'pointer', maxWidth: '150px' }}
+                          >
+                            {catOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                          <span style={{ fontSize: '10px', color: statusColor, border: '1px solid ' + statusColor + '55', borderRadius: '10px', padding: '2px 8px' }}>
+                            {statusText}
+                          </span>
+                        </div>
+
+                        {(it.balanceAfter != null || it.ref) && (
+                          <div style={{ fontSize: '10px', color: c.sec, marginTop: '5px', wordBreak: 'break-all' }}>
+                            {it.balanceAfter != null && <>{t.importBalanceAfter}: {it.balanceAfter.toLocaleString()} {it.currency}</>}
+                            {it.balanceAfter != null && it.ref && ' · '}
+                            {it.ref && <>{t.importRef}: {it.ref.length > 22 ? it.ref.slice(0, 22) + '…' : it.ref}</>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ padding: '12px 14px', borderTop: '1px solid ' + c.border, display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => { setImportItems(null); ackInbox(); }}
+                  style={{ padding: '11px 16px', fontSize: '13px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}
+                >{t.cancel}</button>
+                <button
+                  onClick={confirmImport}
+                  disabled={importItems.every(i => !i.selected)}
+                  style={{ flex: 1, padding: '11px 16px', fontSize: '13px', fontWeight: 600, borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: importItems.every(i => !i.selected) ? 'default' : 'pointer', opacity: importItems.every(i => !i.selected) ? 0.5 : 1 }}
+                >
+                  {t.importAdd} ({importItems.filter(i => i.selected).length})
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {activeTab === 'dashboard' && (
           <>
@@ -1478,10 +3081,81 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </div>
             </div>
 
+            {backupStale && (
+              <div style={{ backgroundColor: c.card, border: '1px solid ' + c.expenseColor + '70', borderRadius: '12px', padding: '11px 14px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', lineHeight: '1.45' }}>⚠️ {t.backupWarn}</span>
+                <button onClick={exportBackup} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', border: 'none', backgroundColor: c.incomeColor, color: '#fff', cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                  {t.backupExport}
+                </button>
+              </div>
+            )}
+
+            {recurringDue.length > 0 && (
+              <div style={{ backgroundColor: c.card, border: '1px solid ' + c.saveBtn + '70', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>🔁 {t.recurDue}</div>
+                {recurringDue.map(r => (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '6px 0', flexWrap: 'wrap', borderTop: '1px solid ' + c.border }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: '13px' }}>{r.category}{r.description ? ' · ' + r.description : ''}</div>
+                      <div style={{ fontSize: '11px', color: c.sec }}>
+                        {parseFloat(r.amount).toLocaleString()} {r.currency} · {t.recurEvery} {r.day} {t.recurDayShort}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button onClick={() => postRecurring(r)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>{t.recurPost}</button>
+                      <button onClick={() => skipRecurring(r)} style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.recurSkip}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {attentionPlans.length > 0 && (
+              <div style={{ backgroundColor: c.card, borderRadius: '12px', border: '1px solid ' + (overdueCount > 0 ? c.expenseColor + '80' : c.border), padding: '12px 14px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600 }}>{t.planRemindTitle}</span>
+                  <button onClick={() => setActiveTab('plans')} style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.saveBtn, cursor: 'pointer' }}>
+                    {t.planRemindOpen}
+                  </button>
+                </div>
+                {attentionPlans.slice(0, 3).map(pl => {
+                  const info = planDueInfo(pl);
+                  const meta = planKindMeta(pl.kind);
+                  return (
+                    <div key={pl.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', padding: '4px 0', fontSize: '12px' }}>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {meta.icon} {[pl.what, pl.person].filter(Boolean).join(' · ')}
+                      </span>
+                      <span style={{ color: info.color, whiteSpace: 'nowrap', fontWeight: info.urgent ? 600 : 400, fontSize: '11px' }}>{info.text}</span>
+                    </div>
+                  );
+                })}
+                {attentionPlans.length > 3 && (
+                  <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px' }}>+{attentionPlans.length - 3}</div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
               <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
                 <div style={{ fontSize: '10px', color: c.sec, letterSpacing: '0.5px' }}>{t.balance}</div>
                 <div style={{ fontSize: '19px', fontWeight: 600, marginTop: '4px' }}>{balance.toLocaleString()} {currency}</div>
+                {hasCarryData && (
+                  <div style={{ marginTop: '10px', paddingTop: '9px', borderTop: '1px dashed ' + c.border }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '10px', color: c.sec }}>{t.carryLabel}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', color: carryOver >= 0 ? c.incomeColor : c.expenseColor }}>
+                        {carryOver >= 0 ? '+' : '−'}{Math.abs(carryOver).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                      <span style={{ fontSize: '10px', color: c.sec }}>{t.withCarryLabel}</span>
+                      <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', color: balanceWithCarry >= 0 ? c.incomeColor : c.expenseColor }}>
+                        {balanceWithCarry.toLocaleString()} {currency}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
                 <div style={{ fontSize: '10px', color: c.incomeColor, letterSpacing: '0.5px' }}>{t.income}</div>
@@ -1554,12 +3228,14 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                     <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value, customCategory: '' })} style={inputStyle}>
                       <option value="">{t.selectCat}</option>
                       {cats.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}
+                      <option value="__new__">{t.catNew}</option>
                     </select>
                   </div>
-                  {isOther && (
+                  {isNewCat && (
                     <div style={{ marginBottom: '12px' }}>
-                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.customCatPlaceholder}</label>
-                      <input type="text" value={formData.customCategory} onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })} placeholder={t.customCatPlaceholder} style={{ ...inputStyle, border: '1px solid ' + c.saveBtn }} autoFocus />
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.catNewPlaceholder}</label>
+                      <input type="text" value={formData.customCategory} onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })} placeholder={t.catAddPlaceholder} style={{ ...inputStyle, border: '1px solid ' + c.saveBtn }} autoFocus />
+                      <div style={{ fontSize: '11px', color: c.sec, marginTop: '5px' }}>{t.catManageHint}</div>
                     </div>
                   )}
                   <div style={{ marginBottom: '12px' }}>
@@ -1570,6 +3246,15 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                     <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.description}</label>
                     <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} style={inputStyle} />
                   </div>
+                  {tags.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.tagLabel}</label>
+                      <select value={formData.tag} onChange={(e) => setFormData({ ...formData, tag: e.target.value })} style={inputStyle}>
+                        <option value="">{t.tagNone}</option>
+                        {tags.map(tg => <option key={tg} value={tg}>{tg}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div style={{ marginBottom: '14px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.date}</label>
                     <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} style={inputStyle} />
@@ -1748,10 +3433,136 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </div>
             )}
 
-            <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                <h3 style={{ margin: 0, fontSize: '15px' }}>{t.aiAnalysisTitle}</h3>
-                {periodTransactions.length >= 3 && (
+            {Object.keys(balanceByCurrency).filter(cur => Math.abs(balanceByCurrency[cur]) > 0.0001).length > 1 && (
+              <div style={{ backgroundColor: c.card, padding: '14px 16px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+                <div style={{ fontSize: '10px', color: c.sec, letterSpacing: '0.5px', marginBottom: '8px' }}>{t.totalTitle}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px', color: combinedBalance.total >= 0 ? c.incomeColor : c.expenseColor }}>
+                  {Math.round(combinedBalance.total).toLocaleString()} {baseCurrency}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {Object.entries(balanceByCurrency)
+                    .filter(([, v]) => Math.abs(v) > 0.0001)
+                    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+                    .map(([cur, val]) => (
+                      <span key={cur} style={{ fontSize: '11px', padding: '4px 9px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border, color: val >= 0 ? c.incomeColor : c.expenseColor }}>
+                        {Math.round(val).toLocaleString()} {cur}
+                      </span>
+                    ))}
+                </div>
+                {combinedBalance.missing.length > 0 && (
+                  <div style={{ fontSize: '11px', color: c.expenseColor, marginTop: '8px', lineHeight: '1.45' }}>
+                    {combinedBalance.missing.join(', ')} — {t.totalNoRate}. ⚙️ {t.ratesTitle}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {budgetRows.length > 0 && (
+              <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '15px' }}>{t.budgetTitle}</h3>
+                <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px' }}>{t.budgetOnly} {currency}</div>
+                {budgetRows.map(b => {
+                  const over = b.left < 0;
+                  const barColor = over ? c.expenseColor : b.pct >= 80 ? '#E67E22' : c.incomeColor;
+                  return (
+                    <div key={b.key} style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{b.cat}</span>
+                        <span style={{ fontSize: '11px', color: barColor, whiteSpace: 'nowrap', fontWeight: 600 }}>
+                          {over
+                            ? t.budgetOver + ' ' + Math.abs(Math.round(b.left)).toLocaleString()
+                            : t.budgetLeft + ' ' + Math.round(b.left).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ height: '6px', borderRadius: '3px', backgroundColor: c.bg, overflow: 'hidden', border: '1px solid ' + c.border }}>
+                        <div style={{ width: b.pct + '%', height: '100%', backgroundColor: barColor, transition: 'width 0.2s' }} />
+                      </div>
+                      <div style={{ fontSize: '10px', color: c.sec, marginTop: '4px' }}>
+                        {t.budgetSpent} {Math.round(b.spent).toLocaleString()} / {Math.round(b.limit).toLocaleString()} {currency}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '15px' }}>{t.reconTitle}</h3>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>{t.reconHint}</div>
+              {reconciliation.length === 0 ? (
+                <div style={{ fontSize: '12px', color: c.sec, lineHeight: '1.5' }}>{t.reconEmpty}</div>
+              ) : (
+                reconciliation.map(rc => {
+                  const ok = !rc.comparable || Math.abs(rc.diff) < 0.01;
+                  return (
+                    <div key={rc.card + rc.currency} style={{ padding: '10px 0', borderTop: '1px solid ' + c.border }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{t.reconCard} ***{rc.card}</span>
+                        <span style={{ fontSize: '11px', color: ok ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {ok ? '✓ ' + t.reconOk : '⚠ ' + Math.abs(Math.round(rc.diff)).toLocaleString() + ' ' + rc.currency}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px', lineHeight: '1.5' }}>
+                        {t.reconBank}: {Math.round(rc.bank).toLocaleString()} {rc.currency} ({t.reconAsOf} {rc.date}{rc.time ? ' ' + rc.time : ''})
+                      </div>
+                      {!ok && (
+                        <div style={{ fontSize: '11px', color: c.expenseColor, marginTop: '4px', lineHeight: '1.5' }}>
+                          {t.reconGap}. {t.reconOurs}: {Math.round(rc.expected).toLocaleString()} {rc.currency}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ backgroundColor: c.card, padding: showSmsBox ? '16px 18px' : '12px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+              <div
+                onClick={() => setShowSmsBox(!showSmsBox)}
+                role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowSmsBox(!showSmsBox); } }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '11px', color: c.sec, transform: showSmsBox ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
+                <h3 style={{ margin: 0, fontSize: '15px' }}>✉️ {t.smsTitle}</h3>
+              </div>
+              {showSmsBox && (
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.smsHint}</div>
+                  <textarea
+                    value={smsText}
+                    onChange={(e) => setSmsText(e.target.value)}
+                    placeholder={t.smsPlaceholder}
+                    rows={4}
+                    style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical', marginBottom: '8px', fontSize: '12px' }}
+                  />
+                  <button
+                    onClick={() => handleSmsText(smsText)}
+                    disabled={!smsText.trim()}
+                    style={{ width: '100%', padding: '11px', fontSize: '13px', borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: smsText.trim() ? 'pointer' : 'default', fontWeight: 500, opacity: smsText.trim() ? 1 : 0.5 }}
+                  >{t.smsParse}</button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: c.card, padding: aiExpanded ? '18px' : '14px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: aiExpanded ? '12px' : 0, flexWrap: 'wrap', gap: '8px' }}>
+                <div
+                  onClick={() => setAiExpanded(!aiExpanded)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAiExpanded(!aiExpanded); } }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                >
+                  <span style={{ fontSize: '11px', color: c.sec, transform: aiExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
+                  <h3 style={{ margin: 0, fontSize: '15px' }}>{t.aiAnalysisTitle}</h3>
+                  {!aiExpanded && aiAnalysis && (
+                    <span style={{ fontSize: '10px', color: c.incomeColor, border: '1px solid ' + c.incomeColor + '55', borderRadius: '10px', padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                      {t.aiReadyBadge}
+                    </span>
+                  )}
+                </div>
+                {aiExpanded && periodTransactions.length >= 3 && (
                   <button
                     onClick={runAiAnalysis}
                     disabled={aiAnalysisLoading}
@@ -1762,6 +3573,8 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 )}
               </div>
 
+              {aiExpanded && (
+                <>
               {aiAnalysisError && (
                 <div style={{ backgroundColor: '#8B4548', color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
                   {aiAnalysisError}
@@ -1795,6 +3608,8 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 <div style={{ fontSize: '13px', color: c.sec, lineHeight: '1.55', padding: '4px 0' }}>
                   {periodTransactions.length < 3 ? t.aiAnalysisNoData : t.aiAnalysisIntro}
                 </div>
+              )}
+                </>
               )}
             </div>
 
@@ -1879,7 +3694,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                             <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < monthTxs.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                                <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
+                                <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
@@ -1980,6 +3795,24 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                   {allCategories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}
                 </select>
               </div>
+              {tags.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.tagLabel}</label>
+                  <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} style={inputStyle}>
+                    <option value="">{t.tagAll}</option>
+                    {tags.map(tg => <option key={tg} value={tg}>{tg}</option>)}
+                  </select>
+                </div>
+              )}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.searchLabel}</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder={t.searchPlaceholder} style={{ ...inputStyle, flex: 1 }} />
+                  {searchText && (
+                    <button onClick={() => setSearchText('')} style={{ padding: '10px 13px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>✕</button>
+                  )}
+                </div>
+              </div>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <button onClick={exportExcel} style={{ flex: 1, padding: '11px', backgroundColor: '#1E5C3A', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>📊 {t.exportExcel}</button>
                 <button onClick={exportPDF} style={{ flex: 1, padding: '11px', backgroundColor: '#8B2020', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>📄 {t.exportPDF}</button>
@@ -2030,7 +3863,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                   <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < reportData.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                      <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}</div>
+                      <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
                     </div>
                     <div style={{ color: tx.type === 'income' ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap', fontSize: '14px' }}>
                       {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
@@ -2039,6 +3872,279 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'plans' && (
+          <div>
+            {/* Сводка по долгам */}
+            {(debtTotals('iowe').length > 0 || debtTotals('owedme').length > 0) && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                {debtTotals('iowe').length > 0 && (
+                  <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
+                    <div style={{ fontSize: '10px', color: c.expenseColor, letterSpacing: '0.5px' }}>↗️ {t.planTotalIOwe}</div>
+                    {debtTotals('iowe').map(([cur, sum]) => (
+                      <div key={cur} style={{ fontSize: '17px', fontWeight: 600, marginTop: '4px', color: c.expenseColor }}>{sum.toLocaleString()} {cur}</div>
+                    ))}
+                  </div>
+                )}
+                {debtTotals('owedme').length > 0 && (
+                  <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border }}>
+                    <div style={{ fontSize: '10px', color: c.incomeColor, letterSpacing: '0.5px' }}>↘️ {t.planTotalOwedMe}</div>
+                    {debtTotals('owedme').map(([cur, sum]) => (
+                      <div key={cur} style={{ fontSize: '17px', fontWeight: 600, marginTop: '4px', color: c.incomeColor }}>{sum.toLocaleString()} {cur}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Кнопки создания */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+              <button onClick={() => openPlanForm('purchase')} style={{ flex: '1 1 30%', padding: '11px 8px', fontSize: '12px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>{t.planPurchase}</button>
+              <button onClick={() => openPlanForm('iowe')} style={{ flex: '1 1 30%', padding: '11px 8px', fontSize: '12px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>{t.planIOwe}</button>
+              <button onClick={() => openPlanForm('owedme')} style={{ flex: '1 1 30%', padding: '11px 8px', fontSize: '12px', backgroundColor: c.card, color: c.text, border: '1px solid ' + c.border, borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>{t.planOwedMe}</button>
+            </div>
+
+            {/* Форма записи */}
+            {showPlanForm && (
+              <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', marginBottom: '14px', border: '1px solid ' + c.saveBtn }}>
+                <form onSubmit={submitPlan}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planKind}</label>
+                    <select value={planData.kind} onChange={(e) => setPlanData({ ...planData, kind: e.target.value })} style={inputStyle}>
+                      <option value="purchase">{t.planPurchase}</option>
+                      <option value="iowe">{t.planIOwe}</option>
+                      <option value="owedme">{t.planOwedMe}</option>
+                    </select>
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planWhat}</label>
+                    <input type="text" value={planData.what} onChange={(e) => setPlanData({ ...planData, what: e.target.value })} placeholder={t.planWhatPlaceholder} style={inputStyle} autoFocus />
+                  </div>
+                  {planData.kind !== 'purchase' && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planPerson}</label>
+                      <input type="text" value={planData.person} onChange={(e) => setPlanData({ ...planData, person: e.target.value })} placeholder={t.planPersonPlaceholder} style={inputStyle} />
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ flex: 2 }}>
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planAmountOptional}</label>
+                      <input type="number" value={planData.amount} onChange={(e) => setPlanData({ ...planData, amount: e.target.value })} placeholder="0" style={inputStyle} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>&nbsp;</label>
+                      <select value={planData.currency} onChange={(e) => setPlanData({ ...planData, currency: e.target.value })} style={inputStyle}>
+                        {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planDue}</label>
+                    <input type="date" value={planData.dueDate} onChange={(e) => setPlanData({ ...planData, dueDate: e.target.value })} style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.planNote}</label>
+                    <input type="text" value={planData.note} onChange={(e) => setPlanData({ ...planData, note: e.target.value })} placeholder={t.planNotePlaceholder} style={inputStyle} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="submit" style={{ flex: 1, padding: '11px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>{editingPlanId ? t.update : t.save}</button>
+                    <button type="button" onClick={() => { setShowPlanForm(false); setEditingPlanId(null); }} style={{ padding: '11px 18px', backgroundColor: 'transparent', color: c.sec, border: '1px solid ' + c.border, borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>{t.cancel}</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Активные / закрытые */}
+            <div style={{ display: 'flex', gap: '5px', backgroundColor: c.card, padding: '4px', borderRadius: '10px', border: '1px solid ' + c.border, marginBottom: '12px' }}>
+              <button onClick={() => setPlanTab('active')} style={{ flex: 1, padding: '8px', fontSize: '12px', border: 'none', borderRadius: '7px', backgroundColor: planTab === 'active' ? c.tabActive : 'transparent', color: planTab === 'active' ? c.tabText : c.sec, cursor: 'pointer', fontWeight: planTab === 'active' ? 600 : 400 }}>
+                {t.planActive} ({activePlans.length})
+              </button>
+              <button onClick={() => setPlanTab('closed')} style={{ flex: 1, padding: '8px', fontSize: '12px', border: 'none', borderRadius: '7px', backgroundColor: planTab === 'closed' ? c.tabActive : 'transparent', color: planTab === 'closed' ? c.tabText : c.sec, cursor: 'pointer', fontWeight: planTab === 'closed' ? 600 : 400 }}>
+                {t.planClosed} ({closedPlans.length})
+              </button>
+            </div>
+
+            {(planTab === 'active' ? activePlans : closedPlans).length === 0 ? (
+              <div style={{ backgroundColor: c.card, padding: '32px 20px', borderRadius: '12px', border: '1px solid ' + c.border, textAlign: 'center' }}>
+                <div style={{ fontSize: '14px', marginBottom: '6px' }}>{t.planEmpty}</div>
+                <div style={{ fontSize: '12px', color: c.sec, lineHeight: '1.55' }}>{t.planEmptyHint}</div>
+              </div>
+            ) : (
+              (planTab === 'active' ? activePlans : closedPlans).map(pl => {
+                const meta = planKindMeta(pl.kind);
+                const info = planDueInfo(pl);
+                const isConfirming = confirmClosePlanId === pl.id;
+                return (
+                  <div key={pl.id} style={{
+                    backgroundColor: c.card, padding: '13px 14px', borderRadius: '12px', marginBottom: '9px',
+                    border: '1px solid ' + (pl.done ? c.border : (info.urgent ? info.color + '70' : c.border)),
+                    borderLeft: '3px solid ' + (pl.done ? c.border : meta.color),
+                    opacity: pl.done ? 0.62 : 1
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 500, wordBreak: 'break-word', textDecoration: pl.done ? 'line-through' : 'none' }}>
+                          {meta.icon} {pl.what || pl.person}
+                        </div>
+                        {pl.what && pl.person && (
+                          <div style={{ fontSize: '12px', color: c.sec, marginTop: '2px' }}>{pl.person}</div>
+                        )}
+                        {pl.note && (
+                          <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px', lineHeight: '1.45', wordBreak: 'break-word' }}>{pl.note}</div>
+                        )}
+                      </div>
+                      {pl.amount != null && (
+                        <div style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', color: pl.done ? c.sec : meta.color }}>
+                          {pl.amount.toLocaleString()} {pl.currency}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '9px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '11px', color: pl.done ? c.sec : info.color, fontWeight: info.urgent && !pl.done ? 600 : 400 }}>
+                        {pl.done ? t.planClosedOn + ' ' + (pl.doneAt || '') : info.text}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {pl.done ? (
+                          <>
+                            <button onClick={() => reopenPlan(pl.id)} style={{ padding: '5px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.planReopen}</button>
+                            <button onClick={() => { if (window.confirm(t.planDeleteConfirm)) deletePlan(pl.id); }} style={{ padding: '5px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.expenseColor, cursor: 'pointer' }}>{t.delete}</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditPlan(pl)} style={{ padding: '5px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.planEdit}</button>
+                            <button onClick={() => { if (window.confirm(t.planDeleteConfirm)) deletePlan(pl.id); }} style={{ padding: '5px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.delete}</button>
+                            <button onClick={() => pl.amount ? setConfirmClosePlanId(pl.id) : closePlan(pl, false)} style={{ padding: '5px 12px', fontSize: '11px', border: 'none', borderRadius: '6px', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>{t.planDone}</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {isConfirming && (
+                      <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed ' + c.border }}>
+                        <div style={{ fontSize: '12px', marginBottom: '8px', lineHeight: '1.5' }}>{t.planAskCreateTx}</div>
+                        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                          <button onClick={() => closePlan(pl, true)} style={{ padding: '7px 12px', fontSize: '11px', border: 'none', borderRadius: '6px', backgroundColor: pl.kind === 'owedme' ? c.incomeColor : c.expenseColor, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>{t.planCreateTx}</button>
+                          <button onClick={() => closePlan(pl, false)} style={{ padding: '7px 12px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.text, cursor: 'pointer' }}>{t.planJustMark}</button>
+                          <button onClick={() => setConfirmClosePlanId(null)} style={{ padding: '7px 12px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.cancel}</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+
+            <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginTop: '16px' }}>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '15px' }}>{t.budgetTitle}</h3>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>{t.budgetHint}</div>
+
+              {budgetRows.length === 0 && (
+                <div style={{ fontSize: '12px', color: c.sec, marginBottom: '12px' }}>{t.budgetNone}</div>
+              )}
+              {budgetRows.map(b => (
+                <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px 0', borderTop: '1px solid ' + c.border }}>
+                  <span style={{ fontSize: '13px', flex: 1, minWidth: 0 }}>{b.cat}</span>
+                  <span style={{ fontSize: '12px', color: c.sec, whiteSpace: 'nowrap' }}>{Math.round(b.limit).toLocaleString()} {currency}</span>
+                  <button
+                    onClick={() => { const next = { ...budgets }; delete next[b.key]; setBudgets(next); }}
+                    style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
+                  >✕</button>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <select
+                  value={budgetDraft.category}
+                  onChange={(e) => setBudgetDraft({ ...budgetDraft, category: e.target.value })}
+                  style={{ ...inputStyle, flex: '1 1 130px' }}
+                >
+                  <option value="">{t.budgetCategory}</option>
+                  {catsFor('expense').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+                <input
+                  type="number" inputMode="decimal" min="0" step="any"
+                  value={budgetDraft.amount}
+                  onChange={(e) => setBudgetDraft({ ...budgetDraft, amount: e.target.value })}
+                  placeholder={t.budgetAmount}
+                  style={{ ...inputStyle, flex: '1 1 110px' }}
+                />
+                <button
+                  onClick={() => {
+                    const amt = parseFloat(budgetDraft.amount);
+                    if (!budgetDraft.category || !isFinite(amt) || amt <= 0) return;
+                    setBudgets({ ...budgets, [budgetKey(currency, budgetDraft.category)]: amt });
+                    setBudgetDraft({ category: '', amount: '' });
+                  }}
+                  style={{ padding: '10px 16px', fontSize: '12px', borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer', fontWeight: 500 }}
+                >{t.budgetAdd}</button>
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginTop: '16px' }}>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '15px' }}>{t.recurTitle}</h3>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '12px', lineHeight: '1.5' }}>{t.recurHint}</div>
+
+              {recurring.length === 0 && !recurForm && (
+                <div style={{ fontSize: '12px', color: c.sec, marginBottom: '12px' }}>{t.recurNone}</div>
+              )}
+              {recurring.map(r => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '9px 0', borderTop: '1px solid ' + c.border }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500 }}>{r.category}{r.description ? ' · ' + r.description : ''}</div>
+                    <div style={{ fontSize: '11px', color: c.sec }}>
+                      {parseFloat(r.amount).toLocaleString()} {r.currency} · {t.recurEvery} {r.day} {t.recurDayShort}
+                      {' · '}{r.lastPosted ? t.recurLast + ' ' + r.lastPosted : t.recurNever}
+                    </div>
+                  </div>
+                  <button onClick={() => deleteRecurring(r.id)} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}>✕</button>
+                </div>
+              ))}
+
+              {recurForm ? (
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid ' + c.border }}>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <select value={recurForm.type} onChange={(e) => setRecurForm({ ...recurForm, type: e.target.value, category: '' })} style={{ ...inputStyle, flex: '1 1 110px' }}>
+                      <option value="expense">{t.expense}</option>
+                      <option value="income">{t.income}</option>
+                    </select>
+                    <select value={recurForm.category} onChange={(e) => setRecurForm({ ...recurForm, category: e.target.value })} style={{ ...inputStyle, flex: '1 1 130px' }}>
+                      <option value="">{t.selectCat}</option>
+                      {catsFor(recurForm.type).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <input type="number" inputMode="decimal" min="0" step="any" value={recurForm.amount} onChange={(e) => setRecurForm({ ...recurForm, amount: e.target.value })} placeholder={t.amount} style={{ ...inputStyle, flex: '1 1 110px' }} />
+                    <select value={recurForm.currency} onChange={(e) => setRecurForm({ ...recurForm, currency: e.target.value })} style={{ ...inputStyle, flex: '0 1 100px' }}>
+                      {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                    </select>
+                    <input type="number" min="1" max="28" value={recurForm.day} onChange={(e) => setRecurForm({ ...recurForm, day: e.target.value })} placeholder={t.recurDay} style={{ ...inputStyle, flex: '0 1 100px' }} />
+                  </div>
+                  <input type="text" value={recurForm.description} onChange={(e) => setRecurForm({ ...recurForm, description: e.target.value })} placeholder={t.description} style={{ ...inputStyle, marginBottom: '10px' }} />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        const amt = parseFloat(recurForm.amount);
+                        const day = parseInt(recurForm.day, 10);
+                        if (!recurForm.category || !isFinite(amt) || amt <= 0 || !(day >= 1 && day <= 28)) return;
+                        setRecurring([...recurring, { ...recurForm, id: Date.now(), amount: amt, day, lastPosted: null, skipped: null }]);
+                        setRecurForm(null);
+                      }}
+                      style={{ flex: 1, padding: '11px', fontSize: '13px', borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer', fontWeight: 500 }}
+                    >{t.save}</button>
+                    <button onClick={() => setRecurForm(null)} style={{ padding: '11px 16px', fontSize: '13px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.cancel}</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setRecurForm({ type: 'expense', category: '', amount: '', currency, day: '1', description: '', tag: '' })}
+                  style={{ width: '100%', marginTop: '10px', padding: '11px', fontSize: '13px', borderRadius: '8px', border: '1px dashed ' + c.border, backgroundColor: 'transparent', color: c.saveBtn, cursor: 'pointer', fontWeight: 500 }}
+                >{t.recurAdd}</button>
+              )}
+            </div>
+
           </div>
         )}
 
