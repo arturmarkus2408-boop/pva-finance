@@ -100,7 +100,7 @@ const App = () => {
       date: 'Дата', save: 'Сохранить', update: 'Обновить', cancel: 'Отмена',
       recent: 'Последние операции', delete: 'Удалить', edit: 'Редактировать',
       selectCat: 'Выберите категорию', customCatPlaceholder: 'Своя категория',
-      light: 'Светлая', dark: 'Тёмная', soft: 'Деловая',
+      light: 'Светлая', dark: 'Тёмная', soft: 'Деловая', steel: 'Графит',
       dashboard: 'Главная', report: 'Отчёт',
       reportTitle: 'Отчёт за период', dateFrom: 'Дата ОТ', dateTo: 'Дата ДО',
       allTypes: 'Все операции', onlyIncome: 'Только доходы', onlyExpense: 'Только расходы',
@@ -168,6 +168,11 @@ const App = () => {
       importNew: 'новая',
       importDup: 'уже внесена',
       importTransfer: 'похоже на перевод между картами — проверьте',
+      importNeedsCheck: 'не уверен — проверьте сумму и направление',
+      aiExportPdf: 'Сохранить в PDF', aiShare: 'Поделиться', aiCopy: 'Скопировать',
+      aiCopied: 'Скопировано', aiShareFail: 'Отправка не поддерживается — файл сохранён',
+      aiDocTitleAnalysis: 'Анализ расходов', aiDocTitleChat: 'Диалог с ассистентом',
+      importDebt: 'похоже на долг',
       importAdd: 'Внести выбранные',
       importSelectAllNew: 'Отметить все новые',
       importClearAll: 'Снять все',
@@ -293,7 +298,7 @@ const App = () => {
       date: 'Sana', save: 'Saqlash', update: 'Yangilash', cancel: 'Bekor qilish',
       recent: 'Songgi amaliyotlar', delete: "O'chirish", edit: 'Tahrirlash',
       selectCat: 'Kategoriyani tanlang', customCatPlaceholder: "O'z kategoriya",
-      light: 'Yorqin', dark: 'Qora', soft: 'Biznes',
+      light: 'Yorqin', dark: 'Qora', soft: 'Biznes', steel: 'Grafit',
       dashboard: 'Asosiy', report: 'Hisobot',
       reportTitle: 'Davr uchun hisobot', dateFrom: 'Dan', dateTo: 'Gacha',
       allTypes: 'Barcha', onlyIncome: 'Faqat daromad', onlyExpense: 'Faqat xarajat',
@@ -361,6 +366,11 @@ const App = () => {
       importNew: 'yangi',
       importDup: 'allaqachon kiritilgan',
       importTransfer: 'kartalar orasidagi o\'tkazmaga o\'xshaydi — tekshiring',
+      importNeedsCheck: 'ishonchim komil emas — summa va yo\'nalishni tekshiring',
+      aiExportPdf: 'PDF ga saqlash', aiShare: 'Ulashish', aiCopy: 'Nusxalash',
+      aiCopied: 'Nusxalandi', aiShareFail: 'Ulashish qo\'llab-quvvatlanmaydi — fayl saqlandi',
+      aiDocTitleAnalysis: 'Xarajatlar tahlili', aiDocTitleChat: 'Yordamchi bilan suhbat',
+      importDebt: 'qarzga o\'xshaydi',
       importAdd: 'Tanlanganlarni kiritish',
       importSelectAllNew: 'Barcha yangilarni belgilash',
       importClearAll: 'Belgilashni olib tashlash',
@@ -486,7 +496,7 @@ const App = () => {
       date: 'Date', save: 'Save', update: 'Update', cancel: 'Cancel',
       recent: 'Recent transactions', delete: 'Delete', edit: 'Edit',
       selectCat: 'Select category', customCatPlaceholder: 'Custom category',
-      light: 'Light', dark: 'Dark', soft: 'Business',
+      light: 'Light', dark: 'Dark', soft: 'Business', steel: 'Graphite',
       dashboard: 'Dashboard', report: 'Report',
       reportTitle: 'Period report', dateFrom: 'Date FROM', dateTo: 'Date TO',
       allTypes: 'All types', onlyIncome: 'Income only', onlyExpense: 'Expense only',
@@ -554,6 +564,11 @@ const App = () => {
       importNew: 'new',
       importDup: 'already recorded',
       importTransfer: 'looks like a card-to-card transfer — please check',
+      importNeedsCheck: 'not certain — check the amount and direction',
+      aiExportPdf: 'Save as PDF', aiShare: 'Share', aiCopy: 'Copy',
+      aiCopied: 'Copied', aiShareFail: 'Sharing is not supported — the file was saved',
+      aiDocTitleAnalysis: 'Spending analysis', aiDocTitleChat: 'Conversation with the assistant',
+      importDebt: 'looks like a debt',
       importAdd: 'Add selected',
       importSelectAllNew: 'Select all new',
       importClearAll: 'Clear selection',
@@ -679,7 +694,7 @@ const App = () => {
       date: 'Tarih', save: 'Kaydet', update: 'Güncelle', cancel: 'İptal',
       recent: 'Son işlemler', delete: 'Sil', edit: 'Düzenle',
       selectCat: 'Kategori seçin', customCatPlaceholder: 'Özel kategori',
-      light: 'Açık', dark: 'Koyu', soft: 'İş',
+      light: 'Açık', dark: 'Koyu', soft: 'İş', steel: 'Grafit',
       dashboard: 'Ana Sayfa', report: 'Rapor',
       reportTitle: 'Dönem raporu', dateFrom: 'Başlangıç', dateTo: 'Bitiş',
       allTypes: 'Tümü', onlyIncome: 'Yalnızca gelir', onlyExpense: 'Yalnızca gider',
@@ -747,6 +762,11 @@ const App = () => {
       importNew: 'yeni',
       importDup: 'zaten kayıtlı',
       importTransfer: 'kartlar arası transfer gibi görünüyor — kontrol edin',
+      importNeedsCheck: 'emin değilim — tutarı ve yönü kontrol edin',
+      aiExportPdf: 'PDF olarak kaydet', aiShare: 'Paylaş', aiCopy: 'Kopyala',
+      aiCopied: 'Kopyalandı', aiShareFail: 'Paylaşım desteklenmiyor — dosya kaydedildi',
+      aiDocTitleAnalysis: 'Harcama analizi', aiDocTitleChat: 'Asistanla görüşme',
+      importDebt: 'borç gibi görünüyor',
       importAdd: 'Seçilenleri ekle',
       importSelectAllNew: 'Tüm yenileri seç',
       importClearAll: 'Seçimi kaldır',
@@ -932,9 +952,10 @@ const App = () => {
   }, [dashboardPeriod, language, theme, currency, activeTab, showForm, showSettings, listening, scanning]);
 
   const themes = {
-    light: { bg: '#F7F4ED', text: '#1B2845', sec: '#5F5E5A', card: '#FFFFFF', border: '#E0DCD0', incomeColor: '#3F7D58', expenseColor: '#8B4548', saveBtn: '#B07D3F', tabActive: '#1B2845', tabText: '#FFFFFF', carryColor: '#7A5528' },
-    dark: { bg: '#000000', text: '#FFFFFF', sec: '#C9A84C', card: '#111111', border: '#2A2A2A', incomeColor: '#C9A84C', expenseColor: '#E05555', saveBtn: '#C9A84C', tabActive: '#C9A84C', tabText: '#000000', carryColor: '#9FC4E0' },
-    soft: { bg: '#EEF1F5', text: '#1A2635', sec: '#4A6080', card: '#FFFFFF', border: '#C8D3DE', incomeColor: '#1E5C3A', expenseColor: '#6B2737', saveBtn: '#1E3A5C', tabActive: '#1E3A5C', tabText: '#FFFFFF', carryColor: '#8A6A3F' }
+    light: { bg: '#F7F4ED', text: '#1B2845', sec: '#5F5E5A', card: '#FFFFFF', border: '#E0DCD0', incomeColor: '#3F7D58', expenseColor: '#8B4548', saveBtn: '#B07D3F', tabActive: '#1B2845', tabText: '#FFFFFF', carryColor: '#7A5528', balanceColor: '#3A5BA0' },
+    dark: { bg: '#000000', text: '#FFFFFF', sec: '#C9A84C', card: '#111111', border: '#2A2A2A', incomeColor: '#C9A84C', expenseColor: '#E05555', saveBtn: '#C9A84C', tabActive: '#C9A84C', tabText: '#000000', carryColor: '#9FC4E0', balanceColor: '#7FA8E8' },
+    steel: { bg: '#141516', text: '#E8EAEC', sec: '#9AA0A6', card: '#1D1F21', border: '#34383C', incomeColor: '#7FBF9A', expenseColor: '#D98A8A', saveBtn: '#5A6068', tabActive: '#C6CBD1', tabText: '#141516', carryColor: '#B8BEC6', balanceColor: '#8FA8C8' },
+    soft: { bg: '#EEF1F5', text: '#1A2635', sec: '#4A6080', card: '#FFFFFF', border: '#C8D3DE', incomeColor: '#1E5C3A', expenseColor: '#6B2737', saveBtn: '#1E3A5C', tabActive: '#1E3A5C', tabText: '#FFFFFF', carryColor: '#8A6A3F', balanceColor: '#2F5FA8' }
   };
   const c = themes[theme];
 
@@ -1520,7 +1541,42 @@ const App = () => {
   // ===== МНОГОУРОВНЕВАЯ ЗАЩИТА ОТ ОТКЛЮЧЕНИЯ МОДЕЛЕЙ GOOGLE =====
   // Google периодически отключает старые версии Gemini без долгого предупреждения.
   // Пробуем по очереди несколько моделей; если Google отключит одну — тихо переходим к следующей.
-  const GEMINI_MODEL_CHAIN = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash'];
+  // Порядок перебора моделей. Первым идёт псевдоним, который Google сам переводит
+  // на свежую модель — он не устареет. Дальше конкретные версии на случай,
+  // если псевдоним временно недоступен.
+  const GEMINI_MODEL_CHAIN = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3-flash-preview'];
+
+  // Gemini 3 и Gemini 2.5 настраиваются по-разному, и смешивать параметры нельзя:
+  //  - у 3-й серии глубина размышления задаётся строкой thinkingLevel, а thinkingBudget не рекомендуется;
+  //  - у 3-й серии температуру просить не надо вовсе: Google советует оставлять её по умолчанию,
+  //    иначе модель может зацикливаться и отвечать заметно дольше;
+  //  - у 2.5 наоборот: thinkingLevel не поддерживается, нужен числовой thinkingBudget.
+  // Поэтому тело запроса подгоняется под конкретную модель прямо перед отправкой.
+  const adaptRequestForModel = (body, model) => {
+    const isLegacy = model.includes('2.5') || model.includes('2.0');
+    const out = { ...body };
+    const gen = { ...(body.generationConfig || {}) };
+    const think = { ...(gen.thinkingConfig || {}) };
+
+    if (isLegacy) {
+      if (think.thinkingLevel) {
+        const map = { minimal: 0, low: 512, medium: 2048, high: 8192 };
+        think.thinkingBudget = map[think.thinkingLevel] ?? 1024;
+        delete think.thinkingLevel;
+      }
+    } else {
+      delete gen.temperature;
+      delete gen.topP;
+      delete gen.topK;
+      if (think.thinkingBudget != null) {
+        think.thinkingLevel = think.thinkingBudget === 0 ? 'minimal' : think.thinkingBudget <= 1024 ? 'low' : 'medium';
+        delete think.thinkingBudget;
+      }
+    }
+    if (Object.keys(think).length) gen.thinkingConfig = think; else delete gen.thinkingConfig;
+    if (Object.keys(gen).length) out.generationConfig = gen; else delete out.generationConfig;
+    return out;
+  };
 
   // Универсальный вызов Gemini с перебором моделей. requestBody — тело запроса (contents, generationConfig и т.п.)
   // Возвращает текст ответа модели или бросает ошибку с деталями последней неудачной попытки.
@@ -1528,14 +1584,24 @@ const App = () => {
     let lastErrorDetail = '';
     for (const model of GEMINI_MODEL_CHAIN) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-            body: JSON.stringify(requestBody)
-          }
-        );
+        // Если модель молчит дольше минуты, обрываем и идём к следующей,
+        // иначе приложение «висит» без объяснений
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000);
+        let response;
+        try {
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+              body: JSON.stringify(adaptRequestForModel(requestBody, model)),
+              signal: controller.signal
+            }
+          );
+        } finally {
+          clearTimeout(timer);
+        }
         if (!response.ok) {
           let detail = 'HTTP ' + response.status;
           try {
@@ -1753,7 +1819,9 @@ const App = () => {
       description: typeof raw?.description === 'string' ? raw.description.trim().slice(0, 120) : '',
       category,
       possibleTransfer: raw?.possibleTransfer === true || selfTransfer,
-      selfTransfer
+      selfTransfer,
+      needsCheck: raw?.needsCheck === true,
+      isDebt: raw?.isDebt === true
     };
   };
 
@@ -1766,7 +1834,10 @@ const App = () => {
       const dupInBatch = accepted.some(x => isSameTx(item, x));
       const isDup = dupInBase || dupInBatch;
       if (!isDup) accepted.push(item);
-      const status = isDup ? 'dup' : ((item.selfTransfer || item.possibleTransfer) ? 'transfer' : 'new');
+      const status = isDup ? 'dup'
+        : item.needsCheck ? 'check'
+        : (item.selfTransfer || item.possibleTransfer) ? 'transfer'
+        : 'new';
       return { ...item, status, selected: status === 'new' };
     });
   };
@@ -1972,7 +2043,35 @@ const App = () => {
 (B) скриншот SMS от банка или список push-уведомлений — НЕСКОЛЬКО операций;
 (C) экран истории/отчётов банковского приложения (Kapitalbank, Hamkorbank, Ipoteka, Aloqabank, Uzum, Anor, TBC) — несколько операций, иногда с раскрытой карточкой детали внизу;
 (D) квитанция об одной операции: перевод с карты на карту, p2p, оплата услуги, покупка, обмен валюты;
-(E) электронный чек платёжного сервиса (alif, Payme, Click, Uzum Bank) со строками «Сумма», «Комиссия», «Итого».
+(E) электронный чек платёжного сервиса (alif, Payme, Click, Uzum Bank) со строками «Сумма», «Комиссия», «Итого»;
+(F) экран успешного платежа в приложении оператора связи или сервиса: крупная галочка, надпись «Платёж выполнен», «Успешно», «Готово», «Оплачено», сумма, дата и получатель (Mobiuz, Ucell, Beeline, Uzmobile, интернет-провайдер, коммунальные);
+(G) скриншот переписки в мессенджере (Telegram, WhatsApp), где обсуждается или подтверждается перевод денег.
+
+===== ОСОБО ПРО ЭКРАН УСПЕШНОГО ПЛАТЕЖА (F) =====
+Такой экран почти всегда означает РАСХОД. Сумма написана самым крупным шрифтом.
+Дата бывает в сокращённом виде без года: «17 сент. 08:29», «17 сентября», «Bugun 08:29» — год тогда берётся текущий (${todayStr.slice(0, 4)}).
+Получателем считается название сервиса рядом с логотипом (например Mobiuz), а номер телефона под ним — это лицевой счёт, его можно дописать в description.
+Категория для операторов связи и интернета — «${t.categoriesExp[3]}».
+Слова «Фискальный чек», «Детали платежа», «Сохранить платёж», «Повтор», «Готово» — это кнопки интерфейса, а НЕ операции. Никогда не превращай их в отдельные записи.
+
+===== ОСОБО ПРО ПЕРЕПИСКУ В МЕССЕНДЖЕРЕ (G) =====
+Здесь нужна осторожность: в переписке много текста, который не является операцией.
+Извлекай сумму ТОЛЬКО если выполнено одно из двух:
+  1) в кадре видна карточка перевода от банка или платёжного сервиса — например фиолетовый или цветной блок со словами
+     «Готово», «Перевели», «Отправлено», «Перевод выполнен», суммой и именем получателя с последними цифрами карты;
+  2) сам пользователь пишет о совершённом переводе прошедшим временем:
+     «перевёл», «отправил», «скинул», «вернул долг», «рассчитался», «оплатил», «pul tashladim», «o'tkazdim».
+Направление определяй по тому, кто автор сообщения:
+  - сообщения пользователя в Telegram и WhatsApp выровнены ПО ПРАВОМУ краю и обычно на цветном фоне (зелёном или синем);
+  - сообщения собеседника — по левому краю, на сером или белом фоне.
+  Пользователь написал, что перевёл или вернул → "expense".
+  Собеседник написал, что перевёл пользователю, или пользователь пишет «мне вернули», «получил» → "income".
+Имя получателя или отправителя ставь в поле counterparty, последние 4 цифры его карты — в toCard или fromCard.
+Если из переписки видно, что это возврат или получение долга («долг», «qarz», «рассчитался», «осталось»), поставь "isDebt": true
+и в description коротко напиши суть, например «возврат долга».
+НЕ извлекай суммы из фраз о намерении или просьбе: «переведи», «скинь», «должен буду», «сколько с меня», «давай завтра» — это не операции.
+Если сумма упомянута, но непонятно, состоялся ли перевод, всё равно верни операцию, но поставь "needsCheck": true —
+пользователь увидит её отмеченной как требующую проверки и решит сам.
 
 Определи тип и извлеки ВСЕ операции, которые реально видны.
 
@@ -2039,7 +2138,7 @@ const App = () => {
 Все текстовые поля возвращай на языке: ${langWord}.
 
 Верни СТРОГО JSON без markdown:
-{"kind":"receipt" или "statement","items":[{"type":"expense" или "income","amount":число,"fee":число или 0,"currency":"UZS","date":"YYYY-MM-DD","time":"HH:MM" или null,"card":"4283" или null,"counterCard":"1214" или null,"counterparty":"...","ref":"..." или null,"balanceAfter":число или null,"exchangedTo":"","description":"...","category":"...","possibleTransfer":false,"selfTransfer":false}]}`;
+{"kind":"receipt" или "statement","items":[{"isDebt":false,"needsCheck":false,"type":"expense" или "income","amount":число,"fee":число или 0,"currency":"UZS","date":"YYYY-MM-DD","time":"HH:MM" или null,"card":"4283" или null,"counterCard":"1214" или null,"counterparty":"...","ref":"..." или null,"balanceAfter":число или null,"exchangedTo":"","description":"...","category":"...","possibleTransfer":false,"selfTransfer":false}]}`;
 
       const rawStatement = await callGeminiChain({
         contents: [{ parts: [
@@ -2048,8 +2147,7 @@ const App = () => {
         ]}],
         generationConfig: {
           responseMimeType: 'application/json',
-          temperature: 0.1,
-          thinkingConfig: { thinkingBudget: 2048 }
+          thinkingConfig: { thinkingLevel: 'low' }
         }
       });
       let stText = String(rawStatement).trim();
@@ -2335,7 +2433,7 @@ ${Object.entries(catExpense).map(([k, v]) => '- ' + k + ': ' + v.toLocaleString(
         raw = await callGeminiChain({
           systemInstruction: { parts: [{ text: finalSystem }] },
           contents: historyForApi,
-          generationConfig: { temperature: 0.5 }
+          generationConfig: { thinkingConfig: { thinkingLevel: 'low' } }
         });
       } catch (geminiErr) {
         // Groq и OpenRouter используют одинаковый (OpenAI-совместимый) формат сообщений
@@ -2540,6 +2638,69 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     setTimeout(() => setScanNotice(''), 2500);
   };
 
+  // ===== ВЫГРУЗКА ОТВЕТОВ АССИСТЕНТА =====
+  // Собирает текст анализа или диалога в один документ.
+  const aiAnalysisToText = () => {
+    if (!aiAnalysis) return '';
+    const parts = [];
+    if (aiAnalysis.main) parts.push(t.aiSectionMain + '\n' + aiAnalysis.main);
+    if (aiAnalysis.trends) parts.push(t.aiSectionTrends + '\n' + aiAnalysis.trends);
+    if (Array.isArray(aiAnalysis.advice) && aiAnalysis.advice.length) {
+      parts.push(t.aiSectionAdvice + '\n' + aiAnalysis.advice.map((a, i) => (i + 1) + '. ' + a).join('\n'));
+    }
+    if (aiAnalysis.warning) parts.push(t.aiSectionWarning + '\n' + aiAnalysis.warning);
+    return parts.join('\n\n');
+  };
+
+  const chatToText = () => chatMessages
+    .map(m => (m.role === 'user' ? '— ' : '') + m.content)
+    .join('\n\n');
+
+  // Печатная страница: открывается в новой вкладке и сразу вызывает печать,
+  // где в системном окне можно выбрать «Сохранить в PDF»
+  const aiToPdf = (title, body) => {
+    const esc = (x) => String(x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+      <style>
+        body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 28px; color: #1B2845; line-height: 1.6; }
+        h1 { font-size: 19px; margin: 0 0 4px; }
+        .meta { font-size: 12px; color: #666; margin-bottom: 18px; }
+        pre { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 14px; margin: 0; }
+        .noprint { margin-top: 24px; }
+        @media print { .noprint { display: none; } }
+      </style></head><body>
+      <h1>${esc(title)}</h1>
+      <div class="meta">Wallet · ${esc(new Date().toLocaleDateString(language === 'en' ? 'en-GB' : language))} · ${esc(periodLabel)}</div>
+      <pre>${esc(body)}</pre>
+      <div class="noprint"><button onclick="window.print()">${esc(t.aiExportPdf)}</button></div>
+      <script>window.onload = () => setTimeout(() => window.print(), 400);</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { setShareNotice(t.aiShareFail); setTimeout(() => setShareNotice(''), 4000); return; }
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // Отправка текстом: системное меню «Поделиться», а если его нет — буфер обмена
+  const aiShareText = async (title, body) => {
+    const payload = title + '\n\n' + body;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text: payload });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+    try {
+      await navigator.clipboard.writeText(payload);
+      setShareNotice(t.aiCopied);
+    } catch {
+      setShareNotice(t.aiShareFail);
+    }
+    setTimeout(() => setShareNotice(''), 4000);
+  };
+
   const exportExcel = () => {
     const rows = reportData.map(tx => ({
       [t.date]: tx.date,
@@ -2690,6 +2851,8 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     lineHeight: 1.2
   };
 
+  const aiActionBtn = { padding: '6px 11px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer', whiteSpace: 'nowrap' };
+
   const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, boxSizing: 'border-box', fontSize: '14px' };
   const chartTabStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: active ? c.saveBtn : c.card, color: active ? '#FFF' : c.text, cursor: 'pointer', fontWeight: active ? 500 : 400 });
   const tabStyle = (active) => ({ flex: 1, padding: '11px 4px', fontSize: '13px', border: 'none', borderRadius: '8px', backgroundColor: active ? c.tabActive : 'transparent', color: active ? c.tabText : c.sec, cursor: 'pointer', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' });
@@ -2705,6 +2868,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             <select value={theme} onChange={(e) => setTheme(e.target.value)} style={{ padding: '7px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', fontSize: '13px' }}>
               <option value="light">{t.light}</option>
               <option value="dark">{t.dark}</option>
+              <option value="steel">{t.steel}</option>
               <option value="soft">{t.soft}</option>
             </select>
             <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ padding: '7px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', fontSize: '13px' }}>
@@ -2975,8 +3139,11 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
                 {importItems.map((it, idx) => {
                   const catOptions = [...new Set([...(it.type === 'income' ? t.categoriesInc : t.categoriesExp), it.category])];
-                  const statusColor = it.status === 'new' ? c.incomeColor : it.status === 'transfer' ? '#E67E22' : c.sec;
+                  const statusColor = it.status === 'new' ? c.incomeColor
+                    : (it.status === 'transfer' || it.status === 'check') ? '#E67E22'
+                    : c.sec;
                   const statusText = it.status === 'new' ? t.importNew
+                    : it.status === 'check' ? t.importNeedsCheck
                     : it.status === 'transfer' ? (it.selfTransfer ? t.importSelfTransfer : t.importTransfer)
                     : t.importDup;
                   return (
@@ -3153,7 +3320,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
               <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minWidth: 0 }}>
                 <div style={{ fontSize: '10px', color: c.sec, letterSpacing: '0.5px' }}>{t.balance}</div>
-                <div style={{ ...statNumStyle, color: balance >= 0 ? c.text : c.expenseColor }}>{balance.toLocaleString()} {currency}</div>
+                <div style={{ ...statNumStyle, color: c.balanceColor }}>{balance.toLocaleString()} {currency}</div>
               </div>
               <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '12px', border: '1px solid ' + c.border, minWidth: 0 }}>
                 <div style={{ fontSize: '10px', color: c.incomeColor, letterSpacing: '0.5px' }}>{t.income}</div>
@@ -3613,6 +3780,12 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
               {aiAnalysis && !aiAnalysisLoading && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => aiToPdf(t.aiDocTitleAnalysis, aiAnalysisToText())}
+                      style={aiActionBtn}>📄 {t.aiExportPdf}</button>
+                    <button onClick={() => aiShareText(t.aiDocTitleAnalysis, aiAnalysisToText())}
+                      style={aiActionBtn}>↗ {t.aiShare}</button>
+                  </div>
                   {aiAnalysis.main && (
                     <div style={{ backgroundColor: c.saveBtn + '18', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid ' + c.saveBtn }}>
                       <div style={{ fontSize: '11px', fontWeight: 600, color: c.saveBtn, marginBottom: '5px', letterSpacing: '0.3px' }}>{t.aiSectionMain}</div>
@@ -4183,7 +4356,11 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             <div style={{ backgroundColor: c.card, padding: '16px 18px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
               <h3 style={{ margin: 0, fontSize: '15px' }}>{t.chatTitle}</h3>
               {chatMessages.length > 0 && (
-                <button onClick={clearChat} style={{ padding: '6px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.chatClear}</button>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button onClick={() => aiToPdf(t.aiDocTitleChat, chatToText())} style={aiActionBtn}>📄 PDF</button>
+                  <button onClick={() => aiShareText(t.aiDocTitleChat, chatToText())} style={aiActionBtn}>↗ {t.aiShare}</button>
+                  <button onClick={clearChat} style={{ padding: '6px 10px', fontSize: '11px', border: '1px solid ' + c.border, borderRadius: '6px', backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}>{t.chatClear}</button>
+                </div>
               )}
             </div>
 
