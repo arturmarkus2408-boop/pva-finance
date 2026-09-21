@@ -1,7 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend, LabelList } from 'recharts';
 import * as XLSX from 'xlsx';
 import './App.css';
+import { tr as translations } from './i18n';
+import { todayLocal, toIsoDate } from './lib/date';
+import { parseBankSms } from './lib/smsParser';
+import { isSameTx } from './lib/matching';
+import { computeReconciliation } from './lib/reconciliation';
+import { applyCardCurrency } from './lib/currencyConversion';
 
 const App = () => {
   const [transactions, setTransactions] = useState([]);
@@ -23,7 +29,7 @@ const App = () => {
   const [filterType, setFilterType] = useState('all');
   const [formData, setFormData] = useState({
     amount: '', category: '', customCategory: '', description: '', tag: '',
-    date: new Date().toISOString().split('T')[0]
+    date: todayLocal()
   });
   const [geminiKey, setGeminiKey] = useState('');
   const [tempKey, setTempKey] = useState('');
@@ -65,6 +71,12 @@ const App = () => {
   const [budgetDraft, setBudgetDraft] = useState({ category: '', amount: '' });
   // Регулярные платежи
   const [recurring, setRecurring] = useState([]);
+  // Сверка: точка, с которой начинать сравнение по каждой карте («Принять остаток банка»)
+  const [reconAnchors, setReconAnchors] = useState({});
+  const [reconOpen, setReconOpen] = useState(null);
+  // Список последних операций: свёрнут по умолчанию
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentShowAll, setRecentShowAll] = useState(false);
   const [recurForm, setRecurForm] = useState(null);
   // Метки операций
   const [tags, setTags] = useState([]);
@@ -92,802 +104,7 @@ const App = () => {
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
-  const tr = {
-    ru: {
-      appName: 'Wallet', addIncome: '+ Доход', addExpense: '+ Расход',
-      balance: 'БАЛАНС', income: 'ДОХОД', expense: 'РАСХОД',
-      category: 'Категория', amount: 'Сумма', description: 'Описание',
-      date: 'Дата', save: 'Сохранить', update: 'Обновить', cancel: 'Отмена',
-      recent: 'Последние операции', delete: 'Удалить', edit: 'Редактировать',
-      selectCat: 'Выберите категорию', customCatPlaceholder: 'Своя категория',
-      light: 'Светлая', dark: 'Тёмная', soft: 'Деловая', steel: 'Графит',
-      dashboard: 'Главная', report: 'Отчёт',
-      reportTitle: 'Отчёт за период', dateFrom: 'Дата ОТ', dateTo: 'Дата ДО',
-      allTypes: 'Все операции', onlyIncome: 'Только доходы', onlyExpense: 'Только расходы',
-      allCategories: 'Все категории', totalIncome: 'Итого доходов', totalExpense: 'Итого расходов',
-      totalBalance: 'Сальдо', operations: 'Операций', noData: 'Нет данных за период',
-      exportExcel: 'Экспорт Excel', exportPDF: 'Экспорт PDF',
-      addCurrency: '+ Добавить валюту', currencyPlaceholder: 'Напр: GBP, KZT...',
-      categoriesExp: ['Продукты','Коммунальные','Аренда','Интернет','Транспорт','Налоги','Развлечения','Покупки','Другое'],
-      categoriesInc: ['Зарплата','Фриланс','Инвестиции','Перевод','Продажа','Подарок','Другое'],
-      noOperations: 'Нет операций', chartExpenseTitle: 'Расходы по категориям', chartDynamicsTitle: 'Динамика доходов и расходов',
-      pieChart: 'Круг', barChart: 'Столбцы', lineChart: 'Линия', editMode: 'Редактирование',
-      typeLabel: 'Тип', operationType: 'Тип операции', reportResult: 'Результат',
-      periodToday: 'Сегодня', periodWeek: 'Неделя', periodMonth: 'Месяц', periodYear: 'Год', periodAll: 'Всё',
-      dataFor: 'Данные за', otherCategory: 'Прочее',
-      noLineData: 'За «Сегодня» линия не строится — используйте «Неделя», «Месяц» или «Год»',
-      printHint: 'В открывшемся окне нажмите «Сохранить как PDF» в диалоге печати',
-      receiptPhoto: '📷 Фото чека', settings: 'Настройки', saveKey: 'Сохранить ключ',
-      apiKeyLabel: 'API-ключ Gemini', apiKeyPlaceholder: 'AIzaSy...',
-      apiKeyHint: 'Ключ нужен для распознавания чеков. Хранится только на вашем устройстве.',
-      getKey: 'Как получить ключ', keySaved: 'Ключ сохранён',
-      groqKeyLabel: 'API-ключ Groq (резервный, необязательно)', groqKeyPlaceholder: 'gsk_...',
-      groqKeyHint: 'Подключается автоматически, если Gemini недоступен (голос, AI-анализ, чат). Для фото чеков не используется.',
-      getGroqKey: 'Как получить ключ Groq',
-      orKeyLabel: 'API-ключ OpenRouter (резервный 2, необязательно)', orKeyPlaceholder: 'sk-or-...',
-      orKeyHint: 'Третий уровень защиты — подключается, если недоступны и Gemini, и Groq.',
-      getOrKey: 'Как получить ключ OpenRouter',
-      scanning: 'Распознаю чек...', scanFailed: 'Не удалось распознать. Проверьте фото или введите вручную.',
-      scanFailedAuth: 'Ключ API отклонён Google. Обновите ключ в ⚙️ Настройках.',
-      scanFailedNetwork: 'Нет соединения с сервером. Проверьте интернет.',
-      noKeyError: 'Сначала добавьте API-ключ в ⚙️ Настройки', close: 'Закрыть',
-      recognized: 'Проверьте данные и сохраните', fromGallery: 'Из галереи',
-      voiceInput: '🎤', voiceInputTitle: 'Голосовой ввод', voiceListening: 'Слушаю...',
-      voiceProcessing: 'Разбираю фразу...', voiceNotSupported: 'Ваш браузер не поддерживает голосовой ввод. Используйте Chrome или Safari.',
-      micDenied: 'Разрешите доступ к микрофону в настройках браузера',
-      noSpeech: 'Не услышал речи, попробуйте снова', voiceParseError: 'Не удалось разобрать фразу. Скажите чётче или введите вручную.',
-      shareReport: 'Поделиться отчётом', shareTitle: 'Wallet — Отчёт',
-      shareText: 'Отчёт по расходам и доходам',
-      shareNotSupported: '✓ Файл сохранён в папку «Загрузки». Чтобы отправить в мессенджер: откройте приложение «Мои файлы» → «Загрузки» → долгое нажатие на wallet-report → «Поделиться» → выберите приложение.',
-      shareError: 'Не удалось отправить файл',
-      aiAnalysisTitle: '🧠 AI-анализ', aiAnalysisRun: 'Анализировать', aiAnalysisRefresh: 'Обновить',
-      aiAnalysisLoading: 'AI изучает твои финансы...',
-      aiAnalysisIntro: 'Нажми кнопку чтобы получить AI-анализ твоих трат за выбранный период.',
-      aiAnalysisFailed: 'Не удалось получить анализ. Проверь API-ключ и подключение к интернету.',
-      aiAnalysisNoData: 'За выбранный период недостаточно данных для анализа. Добавь несколько операций.',
-      aiSectionMain: '🔍 Что заметил', aiSectionTrends: '📊 Тренды', aiSectionAdvice: '💡 Совет',
-      assistant: 'Ассистент', chatTitle: '🤖 Финансовый ассистент',
-      chatPlaceholder: 'Спроси о налогах, учёте, финансах...',
-      chatSend: 'Отправить', chatClear: 'Очистить чат', chatConfirmClear: 'Очистить всю переписку?',
-      chatEmpty: 'Задай вопрос по налогам, бухгалтерии, финансам или своим тратам.',
-      chatLoading: 'Ассистент думает...',
-      chatUseFinDataLabel: 'Учитывать мои финансы в ответе',
-      chatDisclaimer: 'Это AI-ответы. Для юридически важных решений консультируйся с юристом или бухгалтером.',
-      chatSuggestions: 'Например:',
-      chatExample1: 'Как рассчитать НДФЛ с зарплаты?',
-      chatExample2: 'Что такое единый налоговый платёж для ИП?',
-      chatExample3: 'Как оформить самозанятость в Узбекистане?',
-      chatExample4: 'Куда я больше всего трачу деньги?',
-      carryLabel: 'Перешло с прошлого периода',
-      carryShort: 'ПЕРЕНОС', withCarryShort: 'ИТОГО С ПЕРЕНОСОМ',
-      withCarryLabel: 'Итого с переносом',
-      carryHint: 'Остаток на начало периода',
-      aiReadyBadge: 'анализ готов',
-      importTitle: '📥 Найденные операции',
-      importFound: 'Распознано операций',
-      importNew: 'новая',
-      importDup: 'уже внесена',
-      importTransfer: 'похоже на перевод между картами — проверьте',
-      importNeedsCheck: 'не уверен — проверьте сумму и направление',
-      aiExportPdf: 'Сохранить в PDF', aiShare: 'Поделиться', aiCopy: 'Скопировать',
-      aiCopied: 'Скопировано', aiShareFail: 'Отправка не поддерживается — файл сохранён',
-      aiDocTitleAnalysis: 'Анализ расходов', aiDocTitleChat: 'Диалог с ассистентом',
-      importDebt: 'похоже на долг',
-      importAdd: 'Внести выбранные',
-      importSelectAllNew: 'Отметить все новые',
-      importClearAll: 'Снять все',
-      importNothing: 'На изображении не найдено ни одной операции',
-      importCard: 'карта',
-      importBalanceAfter: 'остаток после',
-      importAdded: 'Внесено операций',
-      importOtherCurrency: 'Часть операций в другой валюте — переключите валюту вверху, чтобы их увидеть',
-      importNoneSelected: 'Не выбрано ни одной операции',
-      statementScanning: 'Читаю выписку...',
-      importDupHint: 'Серым отмечены операции, которые уже есть в базе — повторно они не вносятся.',
-      importFee: 'комиссия', importTotal: 'итого', importRef: 'номер', importExchange: 'обмен на',
-      importSelfTransfer: 'перевод между своими картами',
-      catNew: '➕ Новая категория…', catManage: 'Мои категории',
-      catManageHint: 'Добавляйте свои категории — они сохраняются. Ненужные стандартные можно удалить.',
-      catIncomeTitle: 'Категории доходов', catExpenseTitle: 'Категории расходов',
-      catAdd: 'Добавить', catAddPlaceholder: 'Напр.: Бухгалтерия',
-      catReset: 'Вернуть стандартные', catRenameTitle: 'Новое название категории',
-      catDeleteConfirm: 'Убрать категорию из списка? Уже внесённые операции останутся без изменений.',
-      catNewPlaceholder: 'Название новой категории',
-      plans: 'Планы', plansTitle: '📌 Планы и долги', planAdd: '+ Добавить запись',
-      planKind: 'Тип записи', planPurchase: '🛒 Запланировать покупку', planIOwe: '↗️ Я должен', planOwedMe: '↘️ Мне должны',
-      planWhat: 'Что именно', planWhatPlaceholder: 'Напр.: закупить канцтовары',
-      planPerson: 'Кому / от кого', planPersonPlaceholder: 'Напр.: Андрей',
-      planDue: 'Срок', planNote: 'Заметка', planNotePlaceholder: 'Необязательно',
-      planAmountOptional: 'Сумма (необязательно)',
-      planDone: 'Закрыть', planReopen: 'Вернуть в активные', planEdit: 'Изменить',
-      planEmpty: 'Пока нет ни планов, ни долгов',
-      planEmptyHint: 'Добавьте запись — она будет висеть здесь, пока вы сами её не закроете.',
-      planActive: 'Активные', planClosed: 'Закрытые',
-      planOverdue: 'Просрочено', planDueToday: 'Сегодня', planDueTomorrow: 'Завтра',
-      planInDays: 'через', planDaysShort: 'дн.', planNoDue: 'Без срока',
-      planRemindTitle: '⏰ Требует внимания', planRemindOpen: 'Открыть',
-      planAskCreateTx: 'Внести эту сумму как операцию?',
-      planCreateTx: 'Да, внести', planJustMark: 'Просто закрыть',
-      planTxCategory: 'Долги', planTotalIOwe: 'Я должен', planTotalOwedMe: 'Мне должны',
-      planDeleteConfirm: 'Удалить запись?', planClosedOn: 'закрыто',
-      ownerNameLabel: 'Ваше имя на картах', ownerNamePlaceholder: 'TURDALIYEV A.',
-      ownerNameHint: 'Как оно печатается в квитанциях. Помогает отличить перевод самому себе от настоящего расхода.',
-      myCardsLabel: 'Мои карты', myCardsHint: 'Последние 4 цифры каждой карты. Нужны, чтобы переводы между своими картами не считались расходом.',
-      myCardsDigits: '4 цифры', myCardsName: 'Название (необязательно)', myCardsAdd: 'Добавить карту',
-      backupTitle: 'Резервная копия',
-      backupHint: 'Все данные лежат только в этом браузере. Очистка данных сайта, переустановка приложения или чистка памяти системой сотрут их безвозвратно. Делайте копию хотя бы раз в месяц.',
-      backupExport: 'Сохранить копию',
-      backupImport: 'Восстановить из копии',
-      backupConfirm: 'Заменить ВСЕ текущие данные данными из файла? Текущие записи будут потеряны.',
-      backupDone: 'Копия сохранена',
-      backupRestored: 'Данные восстановлены',
-      backupBadFile: 'Файл не похож на резервную копию Wallet',
-      backupLast: 'Последняя копия',
-      backupNever: 'копию ещё не делали',
-      backupWarn: 'Давно не делали резервную копию данных',
-      ratesTitle: 'Курсы валют',
-      ratesHint: 'Сколько единиц базовой валюты стоит 1 единица другой. Нужно только для сводного баланса — сами операции всегда хранятся в своей валюте.',
-      ratesBase: 'Базовая валюта',
-      ratesFor: 'за 1',
-      totalTitle: 'Сводный баланс',
-      totalHint: 'Все валюты пересчитаны в',
-      totalNoRate: 'курс не задан',
-      reconTitle: '🔍 Сверка с банком',
-      reconHint: 'Сравниваем остаток, который банк прислал в последней квитанции по карте, с тем, что получается по вашим записям.',
-      reconCard: 'Карта',
-      reconBank: 'Банк сообщил',
-      reconOurs: 'По вашим записям',
-      reconDiff: 'Расхождение',
-      reconOk: 'Сходится',
-      reconGap: 'Похоже, какая-то операция не внесена',
-      reconEmpty: 'Пока нет квитанций с остатком на карте. Занесите SMS или квитанцию, где виден баланс, — и сверка появится.',
-      reconAsOf: 'на',
-      smsTitle: 'Приём SMS от банка',
-      smsHint: 'Вставьте текст банковского SMS — приложение разберёт его прямо на устройстве, без интернета и API-ключа.',
-      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
-      smsParse: 'Разобрать текст',
-      smsFail: 'Не удалось разобрать. Проверьте, что это текст банковского SMS.',
-      smsFound: 'Разобрано операций',
-      searchLabel: 'Поиск',
-      searchPlaceholder: 'Описание, категория, контрагент...',
-      budgetTitle: '🎯 Лимиты по категориям',
-      budgetHint: 'Месячный лимит расходов. Приложение просто показывает, сколько осталось, и не мешает тратить.',
-      budgetCategory: 'Категория',
-      budgetAmount: 'Лимит на месяц',
-      budgetAdd: 'Задать лимит',
-      budgetNone: 'Лимиты не заданы',
-      budgetLeft: 'осталось',
-      budgetOver: 'перерасход',
-      budgetSpent: 'потрачено',
-      budgetOnly: 'Лимиты считаются за текущий месяц в валюте',
-      recurTitle: '🔁 Регулярные платежи',
-      recurHint: 'Аренда, подписки, интернет. В нужный день месяца приложение напомнит и внесёт платёж одной кнопкой.',
-      recurAdd: '+ Добавить регулярный',
-      recurDay: 'День месяца',
-      recurDue: 'Пора внести',
-      recurPost: 'Внести',
-      recurSkip: 'Пропустить месяц',
-      recurNone: 'Регулярных платежей нет',
-      recurLast: 'внесён',
-      recurNever: 'ещё не вносился',
-      recurEvery: 'каждое',
-      recurDayShort: 'число',
-      tagLabel: 'Метка',
-      tagNone: 'Без метки',
-      tagAll: 'Все метки',
-      tagsManage: 'Метки операций',
-      tagsHint: 'Разделяйте личные траты и рабочие — отчёт можно будет собрать по одной метке.',
-      tagPlaceholder: 'Название метки',
-      inboxTitle: 'Автоматический приём SMS',
-      inboxHint: 'Телефон сам пересылает банковские SMS на ваш сервер, а приложение забирает их при открытии. Настраивается один раз, дальше вводить ничего не нужно.',
-      inboxKeyLabel: 'Пароль почтового ящика',
-      inboxKeyPlaceholder: 'тот же, что в переменной WALLET_INBOX_KEY',
-      inboxCheck: 'Проверить сейчас',
-      inboxChecking: 'Проверяю...',
-      inboxEmpty: 'Новых сообщений нет',
-      inboxFail: 'Не удалось связаться с почтовым ящиком',
-      inboxBadKey: 'Сервер не принял пароль',
-      inboxNoParse: 'Сообщения получены, но разобрать их не удалось',
-      inboxGot: 'Получено сообщений',
-      inboxPrivacy: 'Текст SMS будет проходить через ваш сервер и временно храниться там до месяца. Суммы и операции сервер не разбирает и не хранит.'
-    },
-    uz: {
-      appName: 'Wallet', addIncome: '+ Daromad', addExpense: '+ Xarajat',
-      balance: 'BALANS', income: 'DAROMAD', expense: 'XARAJAT',
-      category: 'Kategoriya', amount: 'Summa', description: 'Tavsif',
-      date: 'Sana', save: 'Saqlash', update: 'Yangilash', cancel: 'Bekor qilish',
-      recent: 'Songgi amaliyotlar', delete: "O'chirish", edit: 'Tahrirlash',
-      selectCat: 'Kategoriyani tanlang', customCatPlaceholder: "O'z kategoriya",
-      light: 'Yorqin', dark: 'Qora', soft: 'Biznes', steel: 'Grafit',
-      dashboard: 'Asosiy', report: 'Hisobot',
-      reportTitle: 'Davr uchun hisobot', dateFrom: 'Dan', dateTo: 'Gacha',
-      allTypes: 'Barcha', onlyIncome: 'Faqat daromad', onlyExpense: 'Faqat xarajat',
-      allCategories: 'Barcha kategoriyalar', totalIncome: 'Jami daromad', totalExpense: 'Jami xarajat',
-      totalBalance: 'Qoldiq', operations: 'Amaliyotlar', noData: "Ma'lumot yo'q",
-      exportExcel: 'Excel yuklash', exportPDF: 'PDF yuklash',
-      addCurrency: "+ Valyuta qo'shish", currencyPlaceholder: 'Mas: GBP, KZT...',
-      categoriesExp: ['Oziq-ovqat','Kommunal','Ijara','Internet','Transport','Soliqlar','Dam olish','Xaridlar','Boshqa'],
-      categoriesInc: ['Maosh','Frilans','Investitsiya',"O'tkazma",'Sotuv','Sovga','Boshqa'],
-      noOperations: "Amaliyotlar yo'q", chartExpenseTitle: 'Xarajatlar kategoriyalar bo\'yicha', chartDynamicsTitle: 'Daromad va xarajatlar dinamikasi',
-      pieChart: 'Doira', barChart: 'Ustun', lineChart: 'Chiziq', editMode: 'Tahrirlash',
-      typeLabel: 'Tur', operationType: 'Amaliyot turi', reportResult: 'Natija',
-      periodToday: 'Bugun', periodWeek: 'Hafta', periodMonth: 'Oy', periodYear: 'Yil', periodAll: 'Barchasi',
-      dataFor: 'Davr', otherCategory: 'Boshqalar',
-      noLineData: '«Bugun» uchun chiziq qurilmaydi — «Hafta», «Oy» yoki «Yil»ni tanlang',
-      printHint: "Ochilgan oynada bosma dialogida «PDF sifatida saqlash»ni tanlang",
-      receiptPhoto: '📷 Chek surati', settings: 'Sozlamalar', saveKey: 'Kalitni saqlash',
-      apiKeyLabel: 'Gemini API kaliti', apiKeyPlaceholder: 'AIzaSy...',
-      apiKeyHint: 'Chekni aniqlash uchun kalit kerak. Faqat qurilmangizda saqlanadi.',
-      getKey: 'Kalitni qanday olish', keySaved: 'Kalit saqlandi',
-      groqKeyLabel: 'Groq API kaliti (zaxira, ixtiyoriy)', groqKeyPlaceholder: 'gsk_...',
-      groqKeyHint: 'Gemini mavjud bo\'lmasa avtomatik ishga tushadi (ovoz, AI-tahlil, chat). Chek suratlari uchun ishlatilmaydi.',
-      getGroqKey: 'Groq kalitni qanday olish',
-      orKeyLabel: 'OpenRouter API kaliti (2-zaxira, ixtiyoriy)', orKeyPlaceholder: 'sk-or-...',
-      orKeyHint: 'Uchinchi himoya darajasi — Gemini va Groq ikkalasi ham mavjud bo\'lmasa ishga tushadi.',
-      getOrKey: 'OpenRouter kalitni qanday olish',
-      scanning: 'Chek aniqlanmoqda...', scanFailed: 'Aniqlab bo\'lmadi. Suratni tekshiring yoki qo\'lda kiriting.',
-      scanFailedAuth: 'API kalit Google tomonidan rad etildi. ⚙️ Sozlamalarda kalitni yangilang.',
-      scanFailedNetwork: 'Server bilan aloqa yo\'q. Internetni tekshiring.',
-      noKeyError: 'Avval ⚙️ Sozlamalarga API kalitni qo\'shing', close: 'Yopish',
-      recognized: "Ma'lumotlarni tekshirib saqlang", fromGallery: 'Galereyadan',
-      voiceInput: '🎤', voiceInputTitle: 'Ovozli kiritish', voiceListening: 'Tinglayapman...',
-      voiceProcessing: 'Iborani tahlil qilyapman...', voiceNotSupported: 'Brauzeringiz ovozli kiritishni qo\'llab-quvvatlamaydi. Chrome yoki Safari ishlating.',
-      micDenied: 'Brauzer sozlamalarida mikrofonga ruxsat bering',
-      noSpeech: 'Nutq eshitilmadi, qaytadan urinib ko\'ring', voiceParseError: 'Iborani tahlil qilib bo\'lmadi. Aniqroq gapiring yoki qo\'lda kiriting.',
-      shareReport: 'Hisobotni ulashish', shareTitle: 'Wallet — Hisobot',
-      shareText: 'Xarajat va daromadlar hisoboti',
-      shareNotSupported: '✓ Fayl «Yuklashlar» papkasiga saqlandi. Messenjerga jo\'natish uchun: «Mening fayllarim» ilovasini oching → «Yuklashlar» → wallet-report faylini uzoq bosing → «Ulashish» → ilovani tanlang.',
-      shareError: 'Faylni jo\'natib bo\'lmadi',
-      aiAnalysisTitle: '🧠 AI-tahlil', aiAnalysisRun: 'Tahlil qilish', aiAnalysisRefresh: 'Yangilash',
-      aiAnalysisLoading: 'AI moliyangizni o\'rganmoqda...',
-      aiAnalysisIntro: 'Tanlangan davr uchun AI-tahlilni olish uchun tugmani bosing.',
-      aiAnalysisFailed: 'Tahlilni olib bo\'lmadi. API kalitni va internetni tekshiring.',
-      aiAnalysisNoData: 'Tanlangan davr uchun tahlil uchun ma\'lumot yetarli emas. Bir nechta operatsiya qo\'shing.',
-      aiSectionMain: '🔍 Nima payqadim', aiSectionTrends: '📊 Tendensiyalar', aiSectionAdvice: '💡 Maslahat',
-      assistant: 'Assistent', chatTitle: '🤖 Moliyaviy assistent',
-      chatPlaceholder: 'Soliqlar, hisob, moliya haqida so\'rang...',
-      chatSend: 'Yuborish', chatClear: 'Suhbatni tozalash', chatConfirmClear: 'Barcha yozishmalarni tozalaysizmi?',
-      chatEmpty: 'Soliqlar, buxgalteriya, moliya yoki xarajatlaringiz haqida savol bering.',
-      chatLoading: 'Assistent o\'ylayapti...',
-      chatUseFinDataLabel: 'Javobda moliyaviy ma\'lumotlarimni hisobga olish',
-      chatDisclaimer: 'Bu AI javoblari. Muhim yuridik qarorlar uchun yurist yoki buxgalter bilan maslahatlashing.',
-      chatSuggestions: 'Masalan:',
-      chatExample1: 'Ish haqidan NDFLni qanday hisoblash?',
-      chatExample2: 'IPP uchun yagona soliq to\'lovi nima?',
-      chatExample3: 'O\'zbekistonda samozanyat sifatida qanday ro\'yxatdan o\'tish?',
-      chatExample4: 'Qayerga ko\'proq pul sarflamoqdaman?',
-      carryLabel: 'O\'tgan davrlardan qoldiq',
-      carryShort: 'QOLDIQ', withCarryShort: 'QOLDIQ BILAN JAMI',
-      withCarryLabel: 'Qoldiq bilan jami',
-      carryHint: 'Davr boshidagi qoldiq',
-      aiReadyBadge: 'tahlil tayyor',
-      importTitle: '📥 Topilgan amaliyotlar',
-      importFound: 'Aniqlangan amaliyotlar',
-      importNew: 'yangi',
-      importDup: 'allaqachon kiritilgan',
-      importTransfer: 'kartalar orasidagi o\'tkazmaga o\'xshaydi — tekshiring',
-      importNeedsCheck: 'ishonchim komil emas — summa va yo\'nalishni tekshiring',
-      aiExportPdf: 'PDF ga saqlash', aiShare: 'Ulashish', aiCopy: 'Nusxalash',
-      aiCopied: 'Nusxalandi', aiShareFail: 'Ulashish qo\'llab-quvvatlanmaydi — fayl saqlandi',
-      aiDocTitleAnalysis: 'Xarajatlar tahlili', aiDocTitleChat: 'Yordamchi bilan suhbat',
-      importDebt: 'qarzga o\'xshaydi',
-      importAdd: 'Tanlanganlarni kiritish',
-      importSelectAllNew: 'Barcha yangilarni belgilash',
-      importClearAll: 'Belgilashni olib tashlash',
-      importNothing: 'Rasmda birorta ham amaliyot topilmadi',
-      importCard: 'karta',
-      importBalanceAfter: 'keyingi qoldiq',
-      importAdded: 'Kiritilgan amaliyotlar',
-      importOtherCurrency: 'Ba\'zi amaliyotlar boshqa valyutada — ularni ko\'rish uchun yuqoridan valyutani almashtiring',
-      importNoneSelected: 'Birorta amaliyot tanlanmadi',
-      statementScanning: 'Ko\'chirmani o\'qiyapman...',
-      importDupHint: 'Kulrang rangda bazada allaqachon mavjud amaliyotlar — ular qayta kiritilmaydi.',
-      importFee: 'komissiya', importTotal: 'jami', importRef: 'raqam', importExchange: 'almashtirildi',
-      importSelfTransfer: 'o\'z kartalari orasidagi o\'tkazma',
-      catNew: '➕ Yangi kategoriya…', catManage: 'Mening kategoriyalarim',
-      catManageHint: 'O\'z kategoriyalaringizni qo\'shing — ular saqlanadi. Keraksiz standartlarini o\'chirish mumkin.',
-      catIncomeTitle: 'Daromad kategoriyalari', catExpenseTitle: 'Xarajat kategoriyalari',
-      catAdd: 'Qo\'shish', catAddPlaceholder: 'Mas: Buxgalteriya',
-      catReset: 'Standartlarni qaytarish', catRenameTitle: 'Kategoriyaning yangi nomi',
-      catDeleteConfirm: 'Kategoriya ro\'yxatdan olib tashlansinmi? Kiritilgan amaliyotlar o\'zgarishsiz qoladi.',
-      catNewPlaceholder: 'Yangi kategoriya nomi',
-      plans: 'Rejalar', plansTitle: '📌 Rejalar va qarzlar', planAdd: '+ Yozuv qo\'shish',
-      planKind: 'Yozuv turi', planPurchase: '🛒 Xaridni rejalashtirish', planIOwe: '↗️ Men qarzdorman', planOwedMe: '↘️ Menga qarzdor',
-      planWhat: 'Aynan nima', planWhatPlaceholder: 'Mas: kanselyariya olish',
-      planPerson: 'Kimga / kimdan', planPersonPlaceholder: 'Mas: Andrey',
-      planDue: 'Muddat', planNote: 'Izoh', planNotePlaceholder: 'Ixtiyoriy',
-      planAmountOptional: 'Summa (ixtiyoriy)',
-      planDone: 'Yopish', planReopen: 'Faollarga qaytarish', planEdit: 'Tahrirlash',
-      planEmpty: 'Hozircha reja ham, qarz ham yo\'q',
-      planEmptyHint: 'Yozuv qo\'shing — siz uni yopmaguningizcha shu yerda turadi.',
-      planActive: 'Faol', planClosed: 'Yopilgan',
-      planOverdue: 'Muddati o\'tgan', planDueToday: 'Bugun', planDueTomorrow: 'Ertaga',
-      planInDays: 'keyin', planDaysShort: 'kun', planNoDue: 'Muddatsiz',
-      planRemindTitle: '⏰ Diqqat talab qiladi', planRemindOpen: 'Ochish',
-      planAskCreateTx: 'Bu summa amaliyot sifatida kiritilsinmi?',
-      planCreateTx: 'Ha, kiritilsin', planJustMark: 'Shunchaki yopish',
-      planTxCategory: 'Qarzlar', planTotalIOwe: 'Men qarzdorman', planTotalOwedMe: 'Menga qarzdor',
-      planDeleteConfirm: 'Yozuv o\'chirilsinmi?', planClosedOn: 'yopilgan',
-      ownerNameLabel: 'Kartalardagi ismingiz', ownerNamePlaceholder: 'TURDALIYEV A.',
-      ownerNameHint: 'Kvitansiyalarda qanday chiqsa shunday. O\'zingizga o\'tkazmani haqiqiy xarajatdan ajratishga yordam beradi.',
-      myCardsLabel: 'Mening kartalarim', myCardsHint: 'Har bir kartaning oxirgi 4 raqami. O\'z kartalari orasidagi o\'tkazma xarajat deb hisoblanmasligi uchun kerak.',
-      myCardsDigits: '4 raqam', myCardsName: 'Nomi (ixtiyoriy)', myCardsAdd: 'Karta qo\'shish',
-      backupTitle: 'Zaxira nusxa',
-      backupHint: 'Barcha ma\'lumotlar faqat shu brauzerda saqlanadi. Sayt ma\'lumotlarini tozalash yoki ilovani qayta o\'rnatish ularni butunlay o\'chiradi. Oyiga kamida bir marta nusxa oling.',
-      backupExport: 'Nusxani saqlash',
-      backupImport: 'Nusxadan tiklash',
-      backupConfirm: 'BARCHA joriy ma\'lumotlar fayldagilar bilan almashtirilsinmi? Joriy yozuvlar yo\'qoladi.',
-      backupDone: 'Nusxa saqlandi',
-      backupRestored: 'Ma\'lumotlar tiklandi',
-      backupBadFile: 'Fayl Wallet zaxira nusxasiga o\'xshamaydi',
-      backupLast: 'Oxirgi nusxa',
-      backupNever: 'hali nusxa olinmagan',
-      backupWarn: 'Ancha vaqtdan beri zaxira nusxa olinmagan',
-      ratesTitle: 'Valyuta kurslari',
-      ratesHint: 'Boshqa valyutaning 1 birligi necha asosiy valyuta birligiga teng. Faqat umumiy qoldiq uchun kerak.',
-      ratesBase: 'Asosiy valyuta',
-      ratesFor: '1 uchun',
-      totalTitle: 'Umumiy qoldiq',
-      totalHint: 'Barcha valyutalar qayta hisoblandi:',
-      totalNoRate: 'kurs kiritilmagan',
-      reconTitle: '🔍 Bank bilan solishtirish',
-      reconHint: 'Bank oxirgi kvitansiyada yuborgan qoldiqni yozuvlaringizdan chiqadigan qoldiq bilan solishtiramiz.',
-      reconCard: 'Karta',
-      reconBank: 'Bank xabar qildi',
-      reconOurs: 'Yozuvlaringiz bo\'yicha',
-      reconDiff: 'Farq',
-      reconOk: 'Mos keladi',
-      reconGap: 'Qandaydir amaliyot kiritilmaganga o\'xshaydi',
-      reconEmpty: 'Hozircha karta qoldig\'i ko\'rsatilgan kvitansiya yo\'q. Balans ko\'rinadigan SMS yoki kvitansiyani kiriting.',
-      reconAsOf: 'sanasiga',
-      smsTitle: 'Bank SMS qabul qilish',
-      smsHint: 'Bank SMS matnini qo\'ying — ilova uni qurilmada, internetsiz va API kalitsiz tahlil qiladi.',
-      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
-      smsParse: 'Matnni tahlil qilish',
-      smsFail: 'Tahlil qilib bo\'lmadi. Bu bank SMS matni ekanini tekshiring.',
-      smsFound: 'Tahlil qilingan amaliyotlar',
-      searchLabel: 'Qidiruv',
-      searchPlaceholder: 'Tavsif, kategoriya, kontragent...',
-      budgetTitle: '🎯 Kategoriya limitlari',
-      budgetHint: 'Oylik xarajat limiti. Ilova qancha qolganini ko\'rsatadi, xalaqit bermaydi.',
-      budgetCategory: 'Kategoriya',
-      budgetAmount: 'Oylik limit',
-      budgetAdd: 'Limit belgilash',
-      budgetNone: 'Limitlar belgilanmagan',
-      budgetLeft: 'qoldi',
-      budgetOver: 'limitdan oshdi',
-      budgetSpent: 'sarflandi',
-      budgetOnly: 'Limitlar joriy oy uchun shu valyutada hisoblanadi:',
-      recurTitle: '🔁 Doimiy to\'lovlar',
-      recurHint: 'Ijara, obunalar, internet. Kerakli kunda ilova eslatadi va bitta tugma bilan kiritadi.',
-      recurAdd: '+ Doimiy to\'lov qo\'shish',
-      recurDay: 'Oy kuni',
-      recurDue: 'Kiritish vaqti',
-      recurPost: 'Kiritish',
-      recurSkip: 'Bu oyni o\'tkazib yuborish',
-      recurNone: 'Doimiy to\'lovlar yo\'q',
-      recurLast: 'kiritilgan',
-      recurNever: 'hali kiritilmagan',
-      recurEvery: 'har oyning',
-      recurDayShort: '-kuni',
-      tagLabel: 'Belgi',
-      tagNone: 'Belgisiz',
-      tagAll: 'Barcha belgilar',
-      tagsManage: 'Amaliyot belgilari',
-      tagsHint: 'Shaxsiy va ish xarajatlarini ajrating — hisobotni bitta belgi bo\'yicha yig\'ish mumkin.',
-      tagPlaceholder: 'Belgi nomi',
-      inboxTitle: 'SMS avtomatik qabul qilish',
-      inboxHint: 'Telefon bank SMS\'larini serveringizga o\'zi yuboradi, ilova esa ochilganda ularni oladi. Bir marta sozlanadi, keyin hech narsa kiritish kerak emas.',
-      inboxKeyLabel: 'Pochta qutisi paroli',
-      inboxKeyPlaceholder: 'WALLET_INBOX_KEY dagi bilan bir xil',
-      inboxCheck: 'Hozir tekshirish',
-      inboxChecking: 'Tekshiryapman...',
-      inboxEmpty: 'Yangi xabarlar yo\'q',
-      inboxFail: 'Pochta qutisi bilan bog\'lanib bo\'lmadi',
-      inboxBadKey: 'Server parolni qabul qilmadi',
-      inboxNoParse: 'Xabarlar olindi, lekin tahlil qilib bo\'lmadi',
-      inboxGot: 'Olingan xabarlar',
-      inboxPrivacy: 'SMS matni serveringiz orqali o\'tadi va u yerda bir oygacha vaqtincha saqlanadi. Server summalarni tahlil qilmaydi va saqlamaydi.'
-    },
-    en: {
-      appName: 'Wallet', addIncome: '+ Income', addExpense: '+ Expense',
-      balance: 'BALANCE', income: 'INCOME', expense: 'EXPENSE',
-      category: 'Category', amount: 'Amount', description: 'Description',
-      date: 'Date', save: 'Save', update: 'Update', cancel: 'Cancel',
-      recent: 'Recent transactions', delete: 'Delete', edit: 'Edit',
-      selectCat: 'Select category', customCatPlaceholder: 'Custom category',
-      light: 'Light', dark: 'Dark', soft: 'Business', steel: 'Graphite',
-      dashboard: 'Dashboard', report: 'Report',
-      reportTitle: 'Period report', dateFrom: 'Date FROM', dateTo: 'Date TO',
-      allTypes: 'All types', onlyIncome: 'Income only', onlyExpense: 'Expense only',
-      allCategories: 'All categories', totalIncome: 'Total income', totalExpense: 'Total expense',
-      totalBalance: 'Balance', operations: 'Operations', noData: 'No data for period',
-      exportExcel: 'Export Excel', exportPDF: 'Export PDF',
-      addCurrency: '+ Add currency', currencyPlaceholder: 'E.g: GBP, KZT...',
-      categoriesExp: ['Groceries','Utilities','Rent','Internet','Transport','Taxes','Entertainment','Shopping','Other'],
-      categoriesInc: ['Salary','Freelance','Investment','Transfer','Sale','Gift','Other'],
-      noOperations: 'No operations', chartExpenseTitle: 'Expenses by category', chartDynamicsTitle: 'Income and expense dynamics',
-      pieChart: 'Pie', barChart: 'Bar', lineChart: 'Line', editMode: 'Editing',
-      typeLabel: 'Type', operationType: 'Operation type', reportResult: 'Result',
-      periodToday: 'Today', periodWeek: 'Week', periodMonth: 'Month', periodYear: 'Year', periodAll: 'All',
-      dataFor: 'Data for', otherCategory: 'Other',
-      noLineData: 'Line chart is not shown for «Today» — use «Week», «Month» or «Year»',
-      printHint: 'In the opened window, choose «Save as PDF» in the print dialog',
-      receiptPhoto: '📷 Receipt photo', settings: 'Settings', saveKey: 'Save key',
-      apiKeyLabel: 'Gemini API key', apiKeyPlaceholder: 'AIzaSy...',
-      apiKeyHint: 'Key is used to recognize receipts. Stored only on your device.',
-      getKey: 'How to get a key', keySaved: 'Key saved',
-      groqKeyLabel: 'Groq API key (backup, optional)', groqKeyPlaceholder: 'gsk_...',
-      groqKeyHint: 'Kicks in automatically if Gemini is unavailable (voice, AI analysis, chat). Not used for receipt photos.',
-      getGroqKey: 'How to get a Groq key',
-      orKeyLabel: 'OpenRouter API key (2nd backup, optional)', orKeyPlaceholder: 'sk-or-...',
-      orKeyHint: 'Third layer of protection — kicks in if both Gemini and Groq are unavailable.',
-      getOrKey: 'How to get an OpenRouter key',
-      scanning: 'Recognizing receipt...', scanFailed: 'Could not recognize. Check the photo or enter manually.',
-      scanFailedAuth: 'API key rejected by Google. Update the key in ⚙️ Settings.',
-      scanFailedNetwork: 'No connection to server. Check your internet.',
-      noKeyError: 'First add an API key in ⚙️ Settings', close: 'Close',
-      recognized: 'Verify data and save', fromGallery: 'From gallery',
-      voiceInput: '🎤', voiceInputTitle: 'Voice input', voiceListening: 'Listening...',
-      voiceProcessing: 'Parsing phrase...', voiceNotSupported: 'Your browser does not support voice input. Use Chrome or Safari.',
-      micDenied: 'Allow microphone access in browser settings',
-      noSpeech: 'Did not hear speech, try again', voiceParseError: 'Could not parse the phrase. Speak more clearly or enter manually.',
-      shareReport: 'Share report', shareTitle: 'Wallet — Report',
-      shareText: 'Expense and income report',
-      shareNotSupported: '✓ File saved to Downloads folder. To send via messenger: open "My Files" app → "Downloads" → long press wallet-report → "Share" → choose your app.',
-      shareError: 'Could not send file',
-      aiAnalysisTitle: '🧠 AI analysis', aiAnalysisRun: 'Analyze', aiAnalysisRefresh: 'Refresh',
-      aiAnalysisLoading: 'AI is studying your finances...',
-      aiAnalysisIntro: 'Tap the button to get an AI analysis of your expenses for the selected period.',
-      aiAnalysisFailed: 'Could not get the analysis. Check the API key and internet connection.',
-      aiAnalysisNoData: 'Not enough data for analysis in the selected period. Add a few transactions.',
-      aiSectionMain: '🔍 What I noticed', aiSectionTrends: '📊 Trends', aiSectionAdvice: '💡 Advice',
-      assistant: 'Assistant', chatTitle: '🤖 Financial assistant',
-      chatPlaceholder: 'Ask about taxes, accounting, finances...',
-      chatSend: 'Send', chatClear: 'Clear chat', chatConfirmClear: 'Clear all messages?',
-      chatEmpty: 'Ask about taxes, accounting, finances, or your expenses.',
-      chatLoading: 'Assistant is thinking...',
-      chatUseFinDataLabel: 'Use my financial data in the answer',
-      chatDisclaimer: 'These are AI answers. For legally important decisions, consult a lawyer or accountant.',
-      chatSuggestions: 'For example:',
-      chatExample1: 'How to calculate income tax from salary?',
-      chatExample2: 'What is a unified tax payment for entrepreneurs?',
-      chatExample3: 'How to register as self-employed in Uzbekistan?',
-      chatExample4: 'Where do I spend the most money?',
-      carryLabel: 'Carried over from previous periods',
-      carryShort: 'CARRIED OVER', withCarryShort: 'TOTAL WITH CARRY',
-      withCarryLabel: 'Total with carry-over',
-      carryHint: 'Balance at the start of the period',
-      aiReadyBadge: 'analysis ready',
-      importTitle: '📥 Detected transactions',
-      importFound: 'Transactions detected',
-      importNew: 'new',
-      importDup: 'already recorded',
-      importTransfer: 'looks like a card-to-card transfer — please check',
-      importNeedsCheck: 'not certain — check the amount and direction',
-      aiExportPdf: 'Save as PDF', aiShare: 'Share', aiCopy: 'Copy',
-      aiCopied: 'Copied', aiShareFail: 'Sharing is not supported — the file was saved',
-      aiDocTitleAnalysis: 'Spending analysis', aiDocTitleChat: 'Conversation with the assistant',
-      importDebt: 'looks like a debt',
-      importAdd: 'Add selected',
-      importSelectAllNew: 'Select all new',
-      importClearAll: 'Clear selection',
-      importNothing: 'No transactions found in the image',
-      importCard: 'card',
-      importBalanceAfter: 'balance after',
-      importAdded: 'Transactions added',
-      importOtherCurrency: 'Some transactions are in another currency — switch the currency above to see them',
-      importNoneSelected: 'No transactions selected',
-      statementScanning: 'Reading the statement...',
-      importDupHint: 'Greyed-out rows are already in your data — they will not be added again.',
-      importFee: 'fee', importTotal: 'total', importRef: 'ref', importExchange: 'exchanged for',
-      importSelfTransfer: 'transfer between your own cards',
-      catNew: '➕ New category…', catManage: 'My categories',
-      catManageHint: 'Add your own categories — they are saved. Unused default ones can be removed.',
-      catIncomeTitle: 'Income categories', catExpenseTitle: 'Expense categories',
-      catAdd: 'Add', catAddPlaceholder: 'E.g.: Accounting',
-      catReset: 'Restore defaults', catRenameTitle: 'New category name',
-      catDeleteConfirm: 'Remove this category from the list? Recorded transactions stay unchanged.',
-      catNewPlaceholder: 'New category name',
-      plans: 'Plans', plansTitle: '📌 Plans and debts', planAdd: '+ Add entry',
-      planKind: 'Entry type', planPurchase: '🛒 Plan a purchase', planIOwe: '↗️ I owe', planOwedMe: '↘️ Owed to me',
-      planWhat: 'What exactly', planWhatPlaceholder: 'E.g.: buy office supplies',
-      planPerson: 'To / from whom', planPersonPlaceholder: 'E.g.: Andrey',
-      planDue: 'Due date', planNote: 'Note', planNotePlaceholder: 'Optional',
-      planAmountOptional: 'Amount (optional)',
-      planDone: 'Close', planReopen: 'Reopen', planEdit: 'Edit',
-      planEmpty: 'No plans or debts yet',
-      planEmptyHint: 'Add an entry — it stays here until you close it yourself.',
-      planActive: 'Active', planClosed: 'Closed',
-      planOverdue: 'Overdue', planDueToday: 'Today', planDueTomorrow: 'Tomorrow',
-      planInDays: 'in', planDaysShort: 'd', planNoDue: 'No due date',
-      planRemindTitle: '⏰ Needs attention', planRemindOpen: 'Open',
-      planAskCreateTx: 'Record this amount as a transaction?',
-      planCreateTx: 'Yes, record it', planJustMark: 'Just close',
-      planTxCategory: 'Debts', planTotalIOwe: 'I owe', planTotalOwedMe: 'Owed to me',
-      planDeleteConfirm: 'Delete this entry?', planClosedOn: 'closed',
-      ownerNameLabel: 'Your name on the cards', ownerNamePlaceholder: 'TURDALIYEV A.',
-      ownerNameHint: 'As printed on receipts. Helps tell a transfer to yourself from a real expense.',
-      myCardsLabel: 'My cards', myCardsHint: 'Last 4 digits of each card. Keeps transfers between your own cards from counting as expenses.',
-      myCardsDigits: '4 digits', myCardsName: 'Label (optional)', myCardsAdd: 'Add card',
-      backupTitle: 'Backup',
-      backupHint: 'All data lives only in this browser. Clearing site data, reinstalling the app or the system reclaiming storage will wipe it for good. Make a copy at least once a month.',
-      backupExport: 'Save a backup',
-      backupImport: 'Restore from backup',
-      backupConfirm: 'Replace ALL current data with the contents of this file? Current records will be lost.',
-      backupDone: 'Backup saved',
-      backupRestored: 'Data restored',
-      backupBadFile: 'This file does not look like a Wallet backup',
-      backupLast: 'Last backup',
-      backupNever: 'no backup yet',
-      backupWarn: 'It has been a while since your last backup',
-      ratesTitle: 'Exchange rates',
-      ratesHint: 'How many units of the base currency one unit of another is worth. Used only for the combined balance.',
-      ratesBase: 'Base currency',
-      ratesFor: 'per 1',
-      totalTitle: 'Combined balance',
-      totalHint: 'All currencies converted to',
-      totalNoRate: 'no rate set',
-      reconTitle: '🔍 Reconciliation with the bank',
-      reconHint: 'We compare the balance the bank reported in the latest receipt for a card with the balance implied by your records.',
-      reconCard: 'Card',
-      reconBank: 'Bank reported',
-      reconOurs: 'Your records give',
-      reconDiff: 'Difference',
-      reconOk: 'Matches',
-      reconGap: 'Looks like a transaction is missing',
-      reconEmpty: 'No receipts with a card balance yet. Add an SMS or receipt showing the balance and reconciliation will appear.',
-      reconAsOf: 'as of',
-      smsTitle: 'Bank SMS intake',
-      smsHint: 'Paste the text of a bank SMS — the app parses it on your device, with no internet and no API key.',
-      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
-      smsParse: 'Parse text',
-      smsFail: 'Could not parse it. Check that this is the text of a bank SMS.',
-      smsFound: 'Transactions parsed',
-      searchLabel: 'Search',
-      searchPlaceholder: 'Description, category, counterparty...',
-      budgetTitle: '🎯 Category limits',
-      budgetHint: 'A monthly spending limit. The app simply shows what is left and never blocks you.',
-      budgetCategory: 'Category',
-      budgetAmount: 'Monthly limit',
-      budgetAdd: 'Set a limit',
-      budgetNone: 'No limits set',
-      budgetLeft: 'left',
-      budgetOver: 'over budget',
-      budgetSpent: 'spent',
-      budgetOnly: 'Limits are counted for the current month in',
-      recurTitle: '🔁 Recurring payments',
-      recurHint: 'Rent, subscriptions, internet. On the right day of the month the app reminds you and records the payment in one tap.',
-      recurAdd: '+ Add a recurring payment',
-      recurDay: 'Day of month',
-      recurDue: 'Due now',
-      recurPost: 'Record',
-      recurSkip: 'Skip this month',
-      recurNone: 'No recurring payments',
-      recurLast: 'recorded',
-      recurNever: 'never recorded',
-      recurEvery: 'every',
-      recurDayShort: 'of the month',
-      tagLabel: 'Tag',
-      tagNone: 'No tag',
-      tagAll: 'All tags',
-      tagsManage: 'Transaction tags',
-      tagsHint: 'Separate personal spending from work — a report can then be built for a single tag.',
-      tagPlaceholder: 'Tag name',
-      inboxTitle: 'Automatic SMS intake',
-      inboxHint: 'Your phone forwards bank SMS to your own server, and the app collects them when you open it. Set it up once and you never type anything again.',
-      inboxKeyLabel: 'Inbox password',
-      inboxKeyPlaceholder: 'the same as in WALLET_INBOX_KEY',
-      inboxCheck: 'Check now',
-      inboxChecking: 'Checking...',
-      inboxEmpty: 'No new messages',
-      inboxFail: 'Could not reach the inbox',
-      inboxBadKey: 'The server rejected the password',
-      inboxNoParse: 'Messages received, but they could not be parsed',
-      inboxGot: 'Messages received',
-      inboxPrivacy: 'SMS text passes through your own server and is stored there for up to a month. The server never parses or keeps amounts or transactions.'
-    },
-    tr: {
-      appName: 'Wallet', addIncome: '+ Gelir', addExpense: '+ Gider',
-      balance: 'BAKİYE', income: 'GELİR', expense: 'GİDER',
-      category: 'Kategori', amount: 'Tutar', description: 'Açıklama',
-      date: 'Tarih', save: 'Kaydet', update: 'Güncelle', cancel: 'İptal',
-      recent: 'Son işlemler', delete: 'Sil', edit: 'Düzenle',
-      selectCat: 'Kategori seçin', customCatPlaceholder: 'Özel kategori',
-      light: 'Açık', dark: 'Koyu', soft: 'İş', steel: 'Grafit',
-      dashboard: 'Ana Sayfa', report: 'Rapor',
-      reportTitle: 'Dönem raporu', dateFrom: 'Başlangıç', dateTo: 'Bitiş',
-      allTypes: 'Tümü', onlyIncome: 'Yalnızca gelir', onlyExpense: 'Yalnızca gider',
-      allCategories: 'Tüm kategoriler', totalIncome: 'Toplam gelir', totalExpense: 'Toplam gider',
-      totalBalance: 'Bakiye', operations: 'İşlem sayısı', noData: 'Bu dönemde veri yok',
-      exportExcel: 'Excel indir', exportPDF: 'PDF indir',
-      addCurrency: '+ Para birimi ekle', currencyPlaceholder: 'Örn: GBP, KZT...',
-      categoriesExp: ['Market','Faturalar','Kira','İnternet','Ulaşım','Vergiler','Eğlence','Alışveriş','Diğer'],
-      categoriesInc: ['Maaş','Serbest çalışma','Yatırım','Transfer','Satış','Hediye','Diğer'],
-      noOperations: 'İşlem yok', chartExpenseTitle: 'Kategoriye göre giderler', chartDynamicsTitle: 'Gelir ve gider dinamiği',
-      pieChart: 'Pasta', barChart: 'Çubuk', lineChart: 'Çizgi', editMode: 'Düzenleme',
-      typeLabel: 'Tür', operationType: 'İşlem türü', reportResult: 'Sonuç',
-      periodToday: 'Bugün', periodWeek: 'Hafta', periodMonth: 'Ay', periodYear: 'Yıl', periodAll: 'Tümü',
-      dataFor: 'Dönem', otherCategory: 'Diğer',
-      noLineData: '«Bugün» için çizgi grafik oluşturulmuyor — «Hafta», «Ay» veya «Yıl»ı seçin',
-      printHint: 'Açılan pencerede yazdırma dialoğunda «PDF olarak kaydet»i seçin',
-      receiptPhoto: '📷 Fiş fotoğrafı', settings: 'Ayarlar', saveKey: 'Anahtarı kaydet',
-      apiKeyLabel: 'Gemini API anahtarı', apiKeyPlaceholder: 'AIzaSy...',
-      apiKeyHint: 'Anahtar, fişleri tanımak için gereklidir. Yalnızca cihazınızda saklanır.',
-      getKey: 'Anahtar nasıl alınır', keySaved: 'Anahtar kaydedildi',
-      groqKeyLabel: 'Groq API anahtarı (yedek, isteğe bağlı)', groqKeyPlaceholder: 'gsk_...',
-      groqKeyHint: 'Gemini kullanılamazsa otomatik devreye girer (ses, AI analizi, sohbet). Fiş fotoğrafları için kullanılmaz.',
-      getGroqKey: 'Groq anahtarı nasıl alınır',
-      orKeyLabel: 'OpenRouter API anahtarı (2. yedek, isteğe bağlı)', orKeyPlaceholder: 'sk-or-...',
-      orKeyHint: 'Üçüncü koruma katmanı — hem Gemini hem Groq kullanılamazsa devreye girer.',
-      getOrKey: 'OpenRouter anahtarı nasıl alınır',
-      scanning: 'Fiş tanımlanıyor...', scanFailed: 'Tanımlanamadı. Fotoğrafı kontrol edin veya manuel girin.',
-      scanFailedAuth: 'API anahtarı Google tarafından reddedildi. ⚙️ Ayarlar\'dan anahtarı güncelleyin.',
-      scanFailedNetwork: 'Sunucuyla bağlantı yok. İnternetinizi kontrol edin.',
-      noKeyError: 'Önce ⚙️ Ayarlar bölümünden API anahtarı ekleyin', close: 'Kapat',
-      recognized: 'Verileri kontrol edip kaydedin', fromGallery: 'Galeriden',
-      voiceInput: '🎤', voiceInputTitle: 'Sesli giriş', voiceListening: 'Dinliyorum...',
-      voiceProcessing: 'İfade analiz ediliyor...', voiceNotSupported: 'Tarayıcınız sesli girişi desteklemiyor. Chrome veya Safari kullanın.',
-      micDenied: 'Tarayıcı ayarlarında mikrofona erişime izin verin',
-      noSpeech: 'Konuşma duyulmadı, tekrar deneyin', voiceParseError: 'İfade analiz edilemedi. Daha net konuşun veya manuel girin.',
-      shareReport: 'Raporu paylaş', shareTitle: 'Wallet — Rapor',
-      shareText: 'Gelir ve gider raporu',
-      shareNotSupported: '✓ Dosya "İndirilenler" klasörüne kaydedildi. Mesajlaşma uygulamasına göndermek için: "Dosyalarım" uygulamasını açın → "İndirilenler" → wallet-report dosyasına uzun basın → "Paylaş" → uygulamayı seçin.',
-      shareError: 'Dosya gönderilemedi',
-      aiAnalysisTitle: '🧠 AI analizi', aiAnalysisRun: 'Analiz et', aiAnalysisRefresh: 'Yenile',
-      aiAnalysisLoading: 'AI finansınızı inceliyor...',
-      aiAnalysisIntro: 'Seçilen dönem için AI analizini almak için düğmeye dokunun.',
-      aiAnalysisFailed: 'Analiz alınamadı. API anahtarını ve internet bağlantısını kontrol edin.',
-      aiAnalysisNoData: 'Seçilen dönemde analiz için yeterli veri yok. Birkaç işlem ekleyin.',
-      aiSectionMain: '🔍 Fark ettiklerim', aiSectionTrends: '📊 Trendler', aiSectionAdvice: '💡 Tavsiye',
-      assistant: 'Asistan', chatTitle: '🤖 Finansal asistan',
-      chatPlaceholder: 'Vergiler, muhasebe, finans hakkında sorun...',
-      chatSend: 'Gönder', chatClear: 'Sohbeti temizle', chatConfirmClear: 'Tüm mesajları temizlensin mi?',
-      chatEmpty: 'Vergiler, muhasebe, finans veya harcamalarınız hakkında soru sorun.',
-      chatLoading: 'Asistan düşünüyor...',
-      chatUseFinDataLabel: 'Cevapta finansal verilerimi kullan',
-      chatDisclaimer: 'Bunlar AI cevaplarıdır. Yasal olarak önemli kararlar için avukat veya muhasebeciye danışın.',
-      chatSuggestions: 'Örneğin:',
-      chatExample1: 'Maaştan gelir vergisi nasıl hesaplanır?',
-      chatExample2: 'Girişimciler için birleşik vergi ödemesi nedir?',
-      chatExample3: 'Özbekistan\'da serbest çalışan olarak nasıl kayıt olurum?',
-      chatExample4: 'Nereye en çok para harcıyorum?',
-      carryLabel: 'Önceki dönemlerden devir',
-      carryShort: 'DEVİR', withCarryShort: 'DEVİRLE TOPLAM',
-      withCarryLabel: 'Devirle birlikte toplam',
-      carryHint: 'Dönem başı bakiye',
-      aiReadyBadge: 'analiz hazır',
-      importTitle: '📥 Bulunan işlemler',
-      importFound: 'Tanınan işlem sayısı',
-      importNew: 'yeni',
-      importDup: 'zaten kayıtlı',
-      importTransfer: 'kartlar arası transfer gibi görünüyor — kontrol edin',
-      importNeedsCheck: 'emin değilim — tutarı ve yönü kontrol edin',
-      aiExportPdf: 'PDF olarak kaydet', aiShare: 'Paylaş', aiCopy: 'Kopyala',
-      aiCopied: 'Kopyalandı', aiShareFail: 'Paylaşım desteklenmiyor — dosya kaydedildi',
-      aiDocTitleAnalysis: 'Harcama analizi', aiDocTitleChat: 'Asistanla görüşme',
-      importDebt: 'borç gibi görünüyor',
-      importAdd: 'Seçilenleri ekle',
-      importSelectAllNew: 'Tüm yenileri seç',
-      importClearAll: 'Seçimi kaldır',
-      importNothing: 'Görselde hiçbir işlem bulunamadı',
-      importCard: 'kart',
-      importBalanceAfter: 'sonraki bakiye',
-      importAdded: 'Eklenen işlem sayısı',
-      importOtherCurrency: 'Bazı işlemler farklı para biriminde — görmek için yukarıdan para birimini değiştirin',
-      importNoneSelected: 'Hiçbir işlem seçilmedi',
-      statementScanning: 'Ekstre okunuyor...',
-      importDupHint: 'Gri satırlar verilerinizde zaten var — tekrar eklenmeyecek.',
-      importFee: 'komisyon', importTotal: 'toplam', importRef: 'no', importExchange: 'şuna çevrildi',
-      importSelfTransfer: 'kendi kartlarınız arasında transfer',
-      catNew: '➕ Yeni kategori…', catManage: 'Kategorilerim',
-      catManageHint: 'Kendi kategorilerinizi ekleyin — kaydedilir. Kullanmadığınız varsayılanları silebilirsiniz.',
-      catIncomeTitle: 'Gelir kategorileri', catExpenseTitle: 'Gider kategorileri',
-      catAdd: 'Ekle', catAddPlaceholder: 'Örn: Muhasebe',
-      catReset: 'Varsayılanlara dön', catRenameTitle: 'Yeni kategori adı',
-      catDeleteConfirm: 'Kategori listeden çıkarılsın mı? Kayıtlı işlemler değişmez.',
-      catNewPlaceholder: 'Yeni kategori adı',
-      plans: 'Planlar', plansTitle: '📌 Planlar ve borçlar', planAdd: '+ Kayıt ekle',
-      planKind: 'Kayıt türü', planPurchase: '🛒 Alışveriş planla', planIOwe: '↗️ Borçluyum', planOwedMe: '↘️ Bana borçlu',
-      planWhat: 'Tam olarak ne', planWhatPlaceholder: 'Örn: kırtasiye almak',
-      planPerson: 'Kime / kimden', planPersonPlaceholder: 'Örn: Andrey',
-      planDue: 'Son tarih', planNote: 'Not', planNotePlaceholder: 'İsteğe bağlı',
-      planAmountOptional: 'Tutar (isteğe bağlı)',
-      planDone: 'Kapat', planReopen: 'Yeniden aç', planEdit: 'Düzenle',
-      planEmpty: 'Henüz plan veya borç yok',
-      planEmptyHint: 'Bir kayıt ekleyin — siz kapatana kadar burada durur.',
-      planActive: 'Aktif', planClosed: 'Kapalı',
-      planOverdue: 'Gecikmiş', planDueToday: 'Bugün', planDueTomorrow: 'Yarın',
-      planInDays: 'içinde', planDaysShort: 'gün', planNoDue: 'Tarihsiz',
-      planRemindTitle: '⏰ Dikkat gerekiyor', planRemindOpen: 'Aç',
-      planAskCreateTx: 'Bu tutar işlem olarak kaydedilsin mi?',
-      planCreateTx: 'Evet, kaydet', planJustMark: 'Sadece kapat',
-      planTxCategory: 'Borçlar', planTotalIOwe: 'Borçluyum', planTotalOwedMe: 'Bana borçlu',
-      planDeleteConfirm: 'Kayıt silinsin mi?', planClosedOn: 'kapatıldı',
-      ownerNameLabel: 'Kartlardaki adınız', ownerNamePlaceholder: 'TURDALIYEV A.',
-      ownerNameHint: 'Dekontlarda yazıldığı gibi. Kendinize transferi gerçek giderden ayırmaya yardımcı olur.',
-      myCardsLabel: 'Kartlarım', myCardsHint: 'Her kartın son 4 hanesi. Kendi kartlarınız arasındaki transferlerin gider sayılmasını önler.',
-      myCardsDigits: '4 hane', myCardsName: 'Etiket (isteğe bağlı)', myCardsAdd: 'Kart ekle',
-      backupTitle: 'Yedek',
-      backupHint: 'Tüm veriler yalnızca bu tarayıcıda durur. Site verilerini temizlemek veya uygulamayı yeniden kurmak verileri kalıcı olarak siler. Ayda en az bir kez yedek alın.',
-      backupExport: 'Yedek kaydet',
-      backupImport: 'Yedekten geri yükle',
-      backupConfirm: 'TÜM mevcut veriler bu dosyadakilerle değiştirilsin mi? Mevcut kayıtlar kaybolur.',
-      backupDone: 'Yedek kaydedildi',
-      backupRestored: 'Veriler geri yüklendi',
-      backupBadFile: 'Bu dosya bir Wallet yedeğine benzemiyor',
-      backupLast: 'Son yedek',
-      backupNever: 'henüz yedek alınmadı',
-      backupWarn: 'Uzun süredir yedek almadınız',
-      ratesTitle: 'Döviz kurları',
-      ratesHint: 'Başka bir para biriminin 1 birimi kaç temel para birimi eder. Yalnızca birleşik bakiye için gerekir.',
-      ratesBase: 'Temel para birimi',
-      ratesFor: '1 için',
-      totalTitle: 'Birleşik bakiye',
-      totalHint: 'Tüm para birimleri şuna çevrildi:',
-      totalNoRate: 'kur girilmedi',
-      reconTitle: '🔍 Bankayla mutabakat',
-      reconHint: 'Bankanın son dekontta bildirdiği bakiyeyi, kayıtlarınızdan çıkan bakiyeyle karşılaştırıyoruz.',
-      reconCard: 'Kart',
-      reconBank: 'Banka bildirdi',
-      reconOurs: 'Kayıtlarınıza göre',
-      reconDiff: 'Fark',
-      reconOk: 'Uyuşuyor',
-      reconGap: 'Görünüşe göre bir işlem girilmemiş',
-      reconEmpty: 'Henüz kart bakiyesi görünen bir dekont yok. Bakiyenin göründüğü bir SMS veya dekont ekleyin.',
-      reconAsOf: 'tarihi itibarıyla',
-      smsTitle: 'Banka SMS alımı',
-      smsHint: 'Banka SMS metnini yapıştırın — uygulama onu cihazınızda, internetsiz ve API anahtarsız çözümler.',
-      smsPlaceholder: 'Spisanie s karty: HAMKORBANK ATB, UZ,15.09.26 23:22,karta ***4283. summa:501250.00 UZS balans:1633421.97 UZS',
-      smsParse: 'Metni çözümle',
-      smsFail: 'Çözümlenemedi. Bunun bir banka SMS metni olduğundan emin olun.',
-      smsFound: 'Çözümlenen işlem sayısı',
-      searchLabel: 'Arama',
-      searchPlaceholder: 'Açıklama, kategori, karşı taraf...',
-      budgetTitle: '🎯 Kategori limitleri',
-      budgetHint: 'Aylık harcama limiti. Uygulama sadece ne kadar kaldığını gösterir, engellemez.',
-      budgetCategory: 'Kategori',
-      budgetAmount: 'Aylık limit',
-      budgetAdd: 'Limit belirle',
-      budgetNone: 'Limit belirlenmedi',
-      budgetLeft: 'kaldı',
-      budgetOver: 'limit aşıldı',
-      budgetSpent: 'harcandı',
-      budgetOnly: 'Limitler bu ay için şu para biriminde hesaplanır:',
-      recurTitle: '🔁 Düzenli ödemeler',
-      recurHint: 'Kira, abonelikler, internet. Ayın ilgili gününde uygulama hatırlatır ve tek dokunuşla kaydeder.',
-      recurAdd: '+ Düzenli ödeme ekle',
-      recurDay: 'Ayın günü',
-      recurDue: 'Zamanı geldi',
-      recurPost: 'Kaydet',
-      recurSkip: 'Bu ayı atla',
-      recurNone: 'Düzenli ödeme yok',
-      recurLast: 'kaydedildi',
-      recurNever: 'hiç kaydedilmedi',
-      recurEvery: 'her ayın',
-      recurDayShort: '. günü',
-      tagLabel: 'Etiket',
-      tagNone: 'Etiketsiz',
-      tagAll: 'Tüm etiketler',
-      tagsManage: 'İşlem etiketleri',
-      tagsHint: 'Kişisel harcamaları işten ayırın — rapor tek etikete göre alınabilir.',
-      tagPlaceholder: 'Etiket adı',
-      inboxTitle: 'Otomatik SMS alımı',
-      inboxHint: 'Telefonunuz banka SMS\'lerini kendi sunucunuza iletir, uygulama da açıldığında onları alır. Bir kez ayarlanır, sonra hiçbir şey girmezsiniz.',
-      inboxKeyLabel: 'Gelen kutusu parolası',
-      inboxKeyPlaceholder: 'WALLET_INBOX_KEY ile aynı',
-      inboxCheck: 'Şimdi kontrol et',
-      inboxChecking: 'Kontrol ediliyor...',
-      inboxEmpty: 'Yeni mesaj yok',
-      inboxFail: 'Gelen kutusuna ulaşılamadı',
-      inboxBadKey: 'Sunucu parolayı kabul etmedi',
-      inboxNoParse: 'Mesajlar alındı ama çözümlenemedi',
-      inboxGot: 'Alınan mesaj sayısı',
-      inboxPrivacy: 'SMS metni kendi sunucunuzdan geçer ve orada en fazla bir ay saklanır. Sunucu tutarları çözümlemez ve saklamaz.'
-    }
-  };
-
-  const t = tr[language];
+  const t = translations[language];
 
   useEffect(() => {
     const saved = localStorage.getItem('walletData') || localStorage.getItem('pvaData');
@@ -910,6 +127,7 @@ const App = () => {
         if (Array.isArray(data.recurring)) setRecurring(data.recurring);
         if (Array.isArray(data.tags)) setTags(data.tags);
         if (typeof data.lastBackup === 'string') setLastBackup(data.lastBackup);
+        if (data.reconAnchors && typeof data.reconAnchors === 'object') setReconAnchors(data.reconAnchors);
       } catch (e) {}
     }
     const key = localStorage.getItem('walletGeminiKey');
@@ -942,8 +160,8 @@ const App = () => {
       isFirstRender.current = false;
       return;
     }
-    localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup }));
-  }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup]);
+    localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors }));
+  }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors]);
 
   // Автосворачивание раскрытых прошлых месяцев и годов при любом действии вне списка
   useEffect(() => {
@@ -1010,9 +228,24 @@ const App = () => {
       setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date } : tx));
       setEditingId(null);
     } else {
-      setTransactions([...transactions, { id: Date.now(), type: formType, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
+      const amountNum = parseFloat(formData.amount);
+      setTransactions([...transactions, { id: Date.now(), type: formType, amount: amountNum, category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
+      // Эта трата перевалила за месячный лимит? Предупреждаем сразу, а не когда пользователь сам заметит
+      if (formType === 'expense') {
+        const lim = parseFloat(budgets[currency + '|' + finalCategory]);
+        if (lim > 0) {
+          const month = formData.date.slice(0, 7);
+          const spentBefore = transactions
+            .filter(tx => tx.type === 'expense' && tx.currency === currency && tx.category === finalCategory && tx.date.slice(0, 7) === month)
+            .reduce((a, tx) => a + tx.amount, 0);
+          if (spentBefore <= lim && spentBefore + amountNum > lim) {
+            setScanError('⚠ ' + t.budgetJustExceeded + ': ' + finalCategory + ' (' + Math.round(spentBefore + amountNum - lim).toLocaleString() + ' ' + currency + ')');
+            setTimeout(() => setScanError(''), 7000);
+          }
+        }
+      }
     }
-    setFormData({ amount: '', category: '', customCategory: '', description: '', tag: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ amount: '', category: '', customCategory: '', description: '', tag: '', date: todayLocal() });
     setShowForm(false);
   };
 
@@ -1025,12 +258,17 @@ const App = () => {
     setActiveTab('dashboard');
   };
 
-  const deleteTransaction = (id) => setTransactions(transactions.filter(tx => tx.id !== id));
+  const deleteTransaction = (id) => {
+    const tx = transactions.find(x => x.id === id);
+    const label = tx ? (tx.type === 'income' ? '+' : '−') + tx.amount.toLocaleString() + ' ' + tx.currency + ' · ' + tx.category : '';
+    if (!window.confirm(t.confirmDeleteTx + (label ? '\n\n' + label : ''))) return;
+    setTransactions(transactions.filter(x => x.id !== id));
+  };
 
   // ===== ПЛАНЫ И ДОЛГИ =====
   // Три вида записей: запланированная покупка, мой долг кому-то, чужой долг мне.
   // Запись висит активной, пока пользователь сам её не закроет.
-  const [todayStr] = useState(() => new Date().toISOString().split('T')[0]);
+  const [todayStr] = useState(() => todayLocal());
 
   const daysUntil = (dateStr) => {
     if (!dateStr) return null;
@@ -1158,6 +396,78 @@ const App = () => {
   };
 
 
+  // Переименование валюты. Если новое имя уже занято — валюты объединяются.
+  // Меняется всё, что ссылается на валюту: операции, лимиты, платежи, планы, курсы, привязки карт.
+  const renameCurrency = (from) => {
+    const raw = window.prompt(t.currencyRenamePrompt, from);
+    if (raw == null) return;
+    const to = raw.trim().toUpperCase();
+    if (!to || to === from) return;
+    if (currencies.includes(to)) {
+      const msg = t.currencyMergeConfirm.split('{from}').join(from).split('{to}').join(to);
+      if (!window.confirm(msg)) return;
+    }
+    const swap = (x) => (x === from ? to : x);
+    setTransactions(prev => prev.map(tx => tx.currency === from ? { ...tx, currency: to } : tx));
+    setCurrencies(prev => [...new Set(prev.map(swap))]);
+    if (currency === from) setCurrency(to);
+    if (baseCurrency === from) setBaseCurrency(to);
+    setRates(prev => {
+      const n = { ...prev };
+      if (n[from] != null && n[to] == null) n[to] = n[from];
+      delete n[from];
+      return n;
+    });
+    setBudgets(prev => {
+      const n = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const sep = k.indexOf('|');
+        const cur = k.slice(0, sep);
+        n[(cur === from ? to : cur) + k.slice(sep)] = v;
+      });
+      return n;
+    });
+    setRecurring(prev => prev.map(r => r.currency === from ? { ...r, currency: to } : r));
+    setPlans(prev => prev.map(pl => pl.currency === from ? { ...pl, currency: to } : pl));
+    setMyCards(prev => prev.map(mc => mc.currency === from ? { ...mc, currency: to } : mc));
+    setReconAnchors(prev => {
+      const n = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const [card, cur] = k.split('|');
+        n[card + '|' + swap(cur)] = v;
+      });
+      return n;
+    });
+  };
+
+  const deleteCurrency = (cur) => {
+    if (currencies.length <= 1) { window.alert(t.currencyLastOne); return; }
+    const used = transactions.filter(tx => tx.currency === cur).length;
+    if (used > 0) {
+      const msg = t.currencyInUseConfirm.split('{cur}').join(cur).split('{n}').join(String(used));
+      if (!window.confirm(msg)) return;
+      setTransactions(prev => prev.filter(tx => tx.currency !== cur));
+    }
+    const next = currencies.filter(x => x !== cur);
+    setCurrencies(next);
+    if (currency === cur) setCurrency(next[0]);
+    if (baseCurrency === cur) setBaseCurrency(next[0]);
+    setRates(prev => { const n = { ...prev }; delete n[cur]; return n; });
+    setBudgets(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(cur + '|'))));
+    setRecurring(prev => prev.filter(r => r.currency !== cur));
+    setMyCards(prev => prev.map(mc => mc.currency === cur ? { ...mc, currency: '' } : mc));
+  };
+
+  // В какой валюте вести операции по карте.
+  // Сначала смотрим явную привязку в «Моих картах», затем — валюту,
+  // в названии которой стоят те же 4 цифры (например «KPTL *1515»).
+  const cardCurrencyOf = (last4) => {
+    if (!last4) return null;
+    const bound = myCards.find(mc => mc.last4 === last4 && mc.currency);
+    if (bound && currencies.includes(bound.currency)) return bound.currency;
+    return currencies.find(cur => cur.replace(/\D/g, '').endsWith(last4)) || null;
+  };
+
   const addCurrency = () => {
     const val = newCurrency.trim().toUpperCase();
     if (val && !currencies.includes(val)) {
@@ -1183,10 +493,6 @@ const App = () => {
   };
 
   // ===== ФИЛЬТР ПО ПЕРИОДУ ДЛЯ ГЛАВНОГО ЭКРАНА =====
-  // Локальная дата в формате YYYY-MM-DD — сравниваем строки, а не объекты Date,
-  // чтобы граница периода не «уезжала» из-за часового пояса.
-  const toIsoDate = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-
   const getPeriodRange = (period) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1374,14 +680,15 @@ const App = () => {
     return (isFinite(r) && r > 0) ? r : null;
   };
 
-  const balanceByCurrency = (() => {
+  // Пересчитывается только когда меняются операции, а не при каждом нажатии клавиши
+  const balanceByCurrency = useMemo(() => {
     const map = {};
     transactions.forEach(tx => {
       if (!map[tx.currency]) map[tx.currency] = 0;
       map[tx.currency] += tx.type === 'income' ? tx.amount : -tx.amount;
     });
     return map;
-  })();
+  }, [transactions]);
 
   const combinedBalance = (() => {
     let total = 0;
@@ -1400,38 +707,36 @@ const App = () => {
   // Берём самую свежую такую операцию по каждой карте и смотрим: если к этому остатку
   // прибавить всё, что мы записали позже, получится ли то, что у нас в базе сейчас.
   // Расхождение почти всегда означает не внесённую операцию.
-  const reconciliation = (() => {
-    // Группируем операции, у которых банк прислал остаток, по карте и валюте
-    const groups = {};
-    transactions.forEach(tx => {
-      if (!tx.card || tx.balanceAfter == null) return;
-      const key = tx.card + '|' + tx.currency;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push({ ...tx, stamp: tx.date + ' ' + (tx.time || '00:00') });
-    });
+  const reconciliation = useMemo(() => computeReconciliation(transactions, reconAnchors), [transactions, reconAnchors]);
 
-    return Object.entries(groups).map(([key, withBalance]) => {
-      withBalance.sort((a, b) => a.stamp.localeCompare(b.stamp));
-      const first = withBalance[0];
-      const last = withBalance[withBalance.length - 1];
-      const [card, cur] = key.split('|');
-      // Одна точка опоры — сверять не с чем
-      if (withBalance.length < 2) {
-        return { card, currency: cur, bank: last.balanceAfter, date: last.date, time: last.time || '', expected: last.balanceAfter, diff: 0, comparable: false };
-      }
-      // Что должно получиться: остаток на первой точке плюс всё,
-      // что произошло на этой карте после неё и до последней точки включительно
-      const between = transactions.filter(tx => {
-        if (tx.card !== card || tx.currency !== cur) return false;
-        const stamp = tx.date + ' ' + (tx.time || '00:00');
-        return stamp > first.stamp && stamp <= last.stamp;
-      });
-      const delta = between.reduce((acc, tx) => acc + (tx.type === 'income' ? tx.amount : -tx.amount), 0);
-      const expected = first.balanceAfter + delta;
-      const diff = Math.round((last.balanceAfter - expected) * 100) / 100;
-      return { card, currency: cur, bank: last.balanceAfter, date: last.date, time: last.time || '', expected, diff, comparable: true };
-    }).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  })();
+  // «Принять остаток банка»: сверка по карте начинается с последней точки заново
+  const acceptBankBalance = (rc) => {
+    if (!window.confirm(t.reconAcceptConfirm)) return;
+    setReconAnchors(prev => ({ ...prev, [rc.key]: rc.date + ' ' + (rc.time || '00:00') }));
+    setReconOpen(null);
+    setScanNotice(t.reconAccepted);
+    setTimeout(() => setScanNotice(''), 3500);
+  };
+
+  // «Внести разницу»: добавляет операцию на сумму расхождения в том отрезке, где оно возникло.
+  // Операция ставится на ту же минуту, что и банковская точка, поэтому сразу закрывает разрыв.
+  const addReconDifference = (rc, step) => {
+    const gap = step.gap;
+    const type = gap < 0 ? 'expense' : 'income';
+    const list = catsFor(type);
+    setTransactions(prev => [...prev, {
+      id: Date.now(),
+      type,
+      amount: Math.abs(gap),
+      category: list[list.length - 1],
+      description: t.reconMissingDesc + ' ***' + rc.card,
+      currency: rc.currency,
+      date: step.tx.date,
+      time: step.tx.time || null,
+      card: rc.card,
+      source: 'recon'
+    }]);
+  };
 
   // ===== ЛИМИТЫ ПО КАТЕГОРИЯМ =====
   const budgetKey = (cur, cat) => cur + '|' + cat;
@@ -1445,7 +750,7 @@ const App = () => {
     .map(([key, limit]) => {
       const cat = key.slice(currency.length + 1);
       const spent = transactions
-        .filter(tx => tx.type === 'expense' && tx.currency === currency && tx.category === cat && tx.date >= monthStart)
+        .filter(tx => tx.type === 'expense' && tx.currency === currency && tx.category === cat && tx.date.slice(0, 7) === monthStart.slice(0, 7))
         .reduce((sum, tx) => sum + tx.amount, 0);
       const lim = parseFloat(limit);
       return { key, cat, limit: lim, spent, left: lim - spent, pct: Math.min(100, Math.round(spent / lim * 100)) };
@@ -1456,10 +761,23 @@ const App = () => {
   // Считаем платёж «созревшим», если наступил его день месяца, а в этом месяце его ещё не вносили.
   const currentMonthKey = monthStart.slice(0, 7);
   const recurringDue = recurring.filter(r => {
+    if (r.active === false) return false;
     if (r.lastPosted === currentMonthKey || r.skipped === currentMonthKey) return false;
     const today = new Date().getDate();
     return today >= Math.min(28, parseInt(r.day, 10) || 1);
   });
+
+  // Платёж, который наступит завтра — мягкое предупреждение заранее
+  const recurringUpcoming = (() => {
+    const tmr = new Date();
+    tmr.setDate(tmr.getDate() + 1);
+    const key = toIsoDate(tmr).slice(0, 7);
+    return recurring.filter(r => r.active !== false &&
+      (parseInt(r.day, 10) || 1) === tmr.getDate() &&
+      r.lastPosted !== key && r.skipped !== key);
+  })();
+
+  const toggleRecurring = (id) => setRecurring(prev => prev.map(x => x.id === id ? { ...x, active: x.active === false } : x));
 
   const postRecurring = (r) => {
     setTransactions(prev => [...prev, {
@@ -1469,7 +787,7 @@ const App = () => {
       category: r.category,
       description: r.description || '',
       currency: r.currency,
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocal(),
       tag: r.tag || '',
       source: 'recurring'
     }]);
@@ -1483,18 +801,18 @@ const App = () => {
   const exportBackup = () => {
     const payload = {
       app: 'wallet', version: 1, savedAt: new Date().toISOString(),
-      data: { transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags }
+      data: { transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, reconAnchors, chat: chatMessages.slice(-40) }
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'wallet-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    a.download = 'wallet-backup-' + todayLocal() + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setLastBackup(new Date().toISOString().split('T')[0]);
+    setLastBackup(todayLocal());
     setScanNotice(t.backupDone);
     setTimeout(() => setScanNotice(''), 3000);
   };
@@ -1523,6 +841,11 @@ const App = () => {
       if (d.budgets) setBudgets(d.budgets);
       if (Array.isArray(d.recurring)) setRecurring(d.recurring);
       if (Array.isArray(d.tags)) setTags(d.tags);
+      if (d.reconAnchors) setReconAnchors(d.reconAnchors);
+      if (Array.isArray(d.chat)) {
+        setChatMessages(d.chat);
+        try { localStorage.setItem('walletChat', JSON.stringify(d.chat)); } catch { /* память переполнена — не критично */ }
+      }
       setScanNotice(t.backupRestored);
       setTimeout(() => setScanNotice(''), 4000);
     } catch (err) {
@@ -1741,32 +1064,7 @@ const App = () => {
   // Тип, валюта, сумма и дата обязаны совпасть полностью.
   // Карта, остаток после операции и время — если известны у обеих записей и различаются,
   // значит это РАЗНЫЕ операции (две покупки на одну сумму в один день — обычное дело).
-  const isSameTx = (a, b) => {
-    // Номер транзакции из квитанции — самый надёжный признак.
-    // Есть у обеих и совпал — это одна операция, других проверок не нужно.
-    // Есть у обеих и разный — это точно разные операции.
-    if (a.ref && b.ref) return a.ref === b.ref;
 
-    if (a.type !== b.type) return false;
-    if ((a.currency || '') !== (b.currency || '')) return false;
-
-    // Одна и та же операция могла попасть в базу без комиссии (из SMS)
-    // и с комиссией (из квитанции) — сравниваем оба варианта суммы.
-    const amountsOf = (x) => [x.amount, x.baseAmount, x.total]
-      .filter(v => typeof v === 'number' && isFinite(v))
-      .map(v => Math.round(v * 100));
-    const av = amountsOf(a), bv = amountsOf(b);
-    if (!av.some(v => bv.includes(v))) return false;
-
-    if (a.date !== b.date) return false;
-    if (a.card && b.card && a.card !== b.card) return false;
-    if (a.balanceAfter != null && b.balanceAfter != null &&
-        Math.round(a.balanceAfter * 100) !== Math.round(b.balanceAfter * 100)) return false;
-    if (a.time && b.time && a.time !== b.time) return false;
-    return true;
-  };
-
-  // Приведение распознанной операции к внутреннему формату + отбраковка мусора
   const normalizeScannedItem = (raw, fallbackCats) => {
     const num = (v) => {
       if (typeof v === 'number') return isFinite(v) ? v : null;
@@ -1780,7 +1078,7 @@ const App = () => {
     const type = raw?.type === 'income' ? 'income' : 'expense';
     const date = typeof raw?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
       ? raw.date
-      : new Date().toISOString().split('T')[0];
+      : todayLocal();
     const time = typeof raw?.time === 'string' && /^\d{2}:\d{2}$/.test(raw.time) ? raw.time : null;
     const cardDigits = raw?.card ? String(raw.card).replace(/\D/g, '') : '';
     const card = cardDigits.length >= 4 ? cardDigits.slice(-4) : null;
@@ -1827,7 +1125,15 @@ const App = () => {
 
   // Сверяет пачку распознанных операций с базой и между собой,
   // проставляя каждой статус: новая / дубль / перевод между своими картами.
-  const buildReview = (items) => {
+  // ===== ПЕРЕСЧЁТ В ВАЛЮТУ КАРТЫ =====
+  // Пример: долларовая карта, магазин берёт 45 000 сум, банк списывает доллары.
+  // В SMS видны сумма в сумах и остаток в долларах. Самая точная сумма в долларах —
+  // разница остатков до и после операции: её посчитал сам банк, вместе с курсом и комиссией.
+  // Если предыдущего остатка нет — пересчитываем по курсу из настроек.
+  // Если нет и курса — оставляем сумму как есть и просим пользователя проверить.
+
+  const buildReview = (rawItems) => {
+    const items = applyCardCurrency(rawItems, { transactions, cardCurrencyOf, rateOf });
     const accepted = [];
     return items.map(item => {
       const dupInBase = transactions.some(tx => isSameTx(item, tx));
@@ -1846,82 +1152,6 @@ const App = () => {
   // Работает без интернета и без API-ключа: обычные регулярные выражения по формату
   // узбекских банков. Это основа автоматического приёма — текст может прийти
   // из буфера обмена, из «Поделиться» или из ссылки, которую пришлёт автоматизация.
-  const SMS_EXPENSE_WORDS = /(spisanie|списание|pokupka|покупка|platezh|платеж|платёж|oplata|оплата|snyatie|снятие|otpravleno|отправлено|perevod s karty|перевод с карты|withdrawal|debit|xarid|yechib)/i;
-  const SMS_INCOME_WORDS = /(popolnenie|пополнение|zachislenie|зачисление|postuplenie|поступление|vozvrat|возврат|refund|credit|zarplata|зарплата|tushum|kirim|perevod na kartu|перевод на карту)/i;
-
-  // Приводит "1 633 421.97" / "501250,00" / "400 000" к числу
-  const parseSmsNumber = (raw) => {
-    if (!raw) return null;
-    let v = String(raw).replace(/\s/g, '');
-    const lastDot = v.lastIndexOf('.');
-    const lastComma = v.lastIndexOf(',');
-    const sep = Math.max(lastDot, lastComma);
-    if (sep > -1 && /^\d{1,2}$/.test(v.slice(sep + 1))) {
-      v = v.slice(0, sep).replace(/[.,]/g, '') + '.' + v.slice(sep + 1);
-    } else {
-      v = v.replace(/[.,]/g, '');
-    }
-    const n = parseFloat(v);
-    return isFinite(n) ? n : null;
-  };
-
-  const parseBankSms = (text) => {
-    if (!text || typeof text !== 'string') return [];
-    const clean = text.replace(/\u00a0/g, ' ').replace(/\r/g, '');
-    // Каждое новое сообщение начинается со слова-маркера — по ним и режем
-    const marker = /(?=(?:spisanie|списание|pokupka|покупка|platezh|платеж|платёж|oplata|оплата|snyatie|снятие|popolnenie|пополнение|zachislenie|зачисление|postuplenie|поступление|vozvrat|возврат|perevod|перевод)\b)/gi;
-    const chunks = clean.split(marker).map(x => x.trim()).filter(x => /summa|сумма/i.test(x));
-    const source = chunks.length ? chunks : [clean];
-    const out = [];
-    source.forEach(chunk => {
-      const amountM = chunk.match(/(?:summa|сумма)\s*[:=]?\s*([\d\s.,]+?)\s*([A-Z]{3}|сум|so'm|сўм)/i);
-      if (!amountM) return;
-      const amount = parseSmsNumber(amountM[1]);
-      if (!amount || amount <= 0) return;
-      let cur = amountM[2].toUpperCase();
-      if (/СУМ|SO'M|СЎМ/i.test(amountM[2])) cur = 'UZS';
-      const balM = chunk.match(/(?:balans|баланс)\s*[:=]?\s*([\d\s.,]+?)\s*([A-Z]{3}|сум|so'm)/i);
-      const cardM = chunk.match(/(?:kart[aи]?|карт[аы]?)\s*[:\s]*[*x•]*\s*(\d{4})\b/i)
-        || chunk.match(/\d{6}\*+(\d{4})\b/)
-        || chunk.match(/[*x•]{2,}\s*(\d{4})\b/);
-      const dtM = chunk.match(/(\d{2})[./-](\d{2})[./-](\d{2,4})[\s,]+(\d{1,2}):(\d{2})/);
-      let date = null, time = null;
-      if (dtM) {
-        const yy = dtM[3].length === 2 ? '20' + dtM[3] : dtM[3];
-        date = yy + '-' + dtM[2] + '-' + dtM[1];
-        time = String(dtM[4]).padStart(2, '0') + ':' + dtM[5];
-      } else {
-        const dM = chunk.match(/(\d{2})[./-](\d{2})[./-](\d{2,4})/);
-        if (dM) {
-          const yy = dM[3].length === 2 ? '20' + dM[3] : dM[3];
-          date = yy + '-' + dM[2] + '-' + dM[1];
-        }
-      }
-      const isIncome = SMS_INCOME_WORDS.test(chunk) && !SMS_EXPENSE_WORDS.test(chunk);
-      // Описание: то, что стоит до даты и до слова summa
-      let desc = chunk.split(/(?:summa|сумма)/i)[0]
-        .replace(/\s+/g, ' ')
-        .replace(/^[^:]{0,24}:\s*/, '')
-        .replace(/\d{2}[./-]\d{2}[./-]\d{2,4}.*$/, '')
-        .replace(/(?:kart[aи]?|карт[аы]?)\s*[:\s]*[*x•\d]*/i, '')
-        .replace(/[,.\s]+$/, '')
-        .trim();
-      if (desc.length > 60) desc = desc.slice(0, 60);
-      out.push({
-        type: isIncome ? 'income' : 'expense',
-        amount,
-        currency: cur,
-        date,
-        time,
-        card: cardM ? cardM[1] : null,
-        balanceAfter: balM ? parseSmsNumber(balM[1]) : null,
-        description: desc,
-        category: null,
-        possibleTransfer: /uzcard to visa|visa to uzcard|p2p|перевод/i.test(chunk)
-      });
-    });
-    return out;
-  };
 
   // ===== ПОЧТОВЫЙ ЯЩИК: ЗАБРАТЬ НАКОПЛЕННЫЕ SMS С СЕРВЕРА =====
   // Сервер только передаёт текст. Разбор, сверка с базой и решение, что вносить,
@@ -2029,7 +1259,7 @@ const App = () => {
       const base64 = await compressImage(file);
       const knownCats = [...new Set([...catsFor('expense'), ...transactions.filter(tx => tx.type === 'expense').map(tx => tx.category)])].filter(Boolean);
       const knownCatsInc = [...new Set([...catsFor('income'), ...transactions.filter(tx => tx.type === 'income').map(tx => tx.category)])].filter(Boolean);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = todayLocal();
       const langWord = language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe';
 
       const myCardsLine = myCards.length
@@ -2233,6 +1463,8 @@ const App = () => {
         counterCard: i.counterCard || null,
         ref: i.ref || null,
         balanceAfter: i.balanceAfter ?? null,
+        originalAmount: i.originalAmount ?? null,
+        originalCurrency: i.originalCurrency || null,
         source: 'import'
       };
     });
@@ -2293,7 +1525,7 @@ const App = () => {
     setScanning(true);
     try {
       const knownCats = [...new Set([...catsFor('income'), ...catsFor('expense'), ...transactions.map(tx => tx.category)])].filter(Boolean);
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayLocal();
       const prompt = `Ты парсер фраз финансового приложения. Разбери фразу пользователя.
 
 Определи и верни СТРОГО JSON без markdown:
@@ -2324,7 +1556,7 @@ const App = () => {
       const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
       if (!amount || isNaN(amount)) throw new Error('no-amount-found');
       const txType = parsed.type === 'income' ? 'income' : 'expense';
-      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : new Date().toISOString().split('T')[0];
+      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayLocal();
       if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
       const langCats = catsFor(txType);
       let categoryValue = '';
@@ -2708,7 +1940,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
       [t.category]: tx.category,
       [t.description]: tx.description || '',
       [t.amount]: tx.amount,
-      'Валюта': tx.currency,
+      [t.currencyCol]: tx.currency,
       [t.importCard]: tx.card ? '***' + tx.card : ''
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -2727,7 +1959,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
       [t.category]: tx.category,
       [t.description]: tx.description || '',
       [t.amount]: tx.amount,
-      'Валюта': tx.currency,
+      [t.currencyCol]: tx.currency,
       [t.importCard]: tx.card ? '***' + tx.card : ''
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -2735,7 +1967,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     XLSX.utils.book_append_sheet(wb, ws, 'Wallet');
     const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
     const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = todayLocal();
     const filename = 'wallet-report-' + dateStr + '.xlsx';
     const file = new File([blob], filename, { type: blob.type });
 
@@ -2860,6 +2092,14 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
   return (
     <div style={{ backgroundColor: c.bg, color: c.text, minHeight: '100vh', padding: '16px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <style>{`
+        @keyframes walletGlow {
+          0%, 100% { box-shadow: 0 0 0 0 var(--glow, transparent); }
+          50% { box-shadow: 0 0 18px 3px var(--glow, transparent); }
+        }
+        .wallet-glow { animation: walletGlow 2.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .wallet-glow { animation: none; } }
+      `}</style>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
@@ -2918,13 +2158,25 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.myCardsLabel}</label>
               <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.myCardsHint}</div>
               {myCards.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
                   {myCards.map(mc => (
-                    <span key={mc.last4} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 9px', fontSize: '12px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
-                      ***{mc.last4}{mc.label ? ' · ' + mc.label : ''}
+                    <div key={mc.last4} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
+                      <span style={{ fontSize: '12px', flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <b>***{mc.last4}</b>{mc.label ? ' · ' + mc.label : ''}
+                      </span>
+                      <select
+                        value={mc.currency || ''}
+                        onChange={(e) => setMyCards(myCards.map(x => x.last4 === mc.last4 ? { ...x, currency: e.target.value } : x))}
+                        title={t.cardCurrency}
+                        style={{ padding: '5px 6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', maxWidth: '120px' }}
+                      >
+                        <option value="">{t.cardCurrencyAuto}</option>
+                        {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                      </select>
                       <button onClick={() => setMyCards(myCards.filter(x => x.last4 !== mc.last4))} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: 0, lineHeight: 1 }}>✕</button>
-                    </span>
+                    </div>
                   ))}
+                  <div style={{ fontSize: '11px', color: c.sec, lineHeight: '1.5' }}>{t.cardCurrencyHint}</div>
                 </div>
               )}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '4px' }}>
@@ -3025,6 +2277,24 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             </div>
 
             <div style={{ borderTop: '1px solid ' + c.border, paddingTop: '14px', marginTop: '14px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.currenciesManage}</label>
+              <div style={{ fontSize: '11px', color: c.sec, marginBottom: '8px', lineHeight: '1.5' }}>{t.currenciesHint}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+                {currencies.map(cur => {
+                  const used = transactions.filter(tx => tx.currency === cur).length;
+                  return (
+                    <div key={cur} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', backgroundColor: c.bg, border: '1px solid ' + c.border }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{cur}</span>
+                      <span style={{ fontSize: '11px', color: c.sec, whiteSpace: 'nowrap' }}>{used}</span>
+                      <button onClick={() => renameCurrency(cur)} title={t.edit}
+                        style={{ background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', fontSize: '13px', padding: '2px 4px' }}>✎</button>
+                      <button onClick={() => deleteCurrency(cur)} title={t.delete}
+                        style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: '2px 4px' }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+
               <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec, fontWeight: 600 }}>{t.ratesTitle}</label>
               <div style={{ fontSize: '11px', color: c.sec, marginBottom: '10px', lineHeight: '1.5' }}>{t.ratesHint}</div>
               <label style={{ display: 'block', marginBottom: '5px', fontSize: '11px', color: c.sec }}>{t.ratesBase}</label>
@@ -3094,9 +2364,9 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
           <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
           <button onClick={() => setActiveTab('plans')} style={{ ...tabStyle(activeTab === 'plans'), position: 'relative' }}>
             {t.plans}
-            {overdueCount > 0 && activeTab !== 'plans' && (
+            {(overdueCount + recurringDue.length + budgetRows.filter(b => b.left < 0).length) > 0 && activeTab !== 'plans' && (
               <span style={{ position: 'absolute', top: '5px', right: '7px', minWidth: '16px', height: '16px', borderRadius: '8px', backgroundColor: c.expenseColor, color: '#fff', fontSize: '10px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
-                {overdueCount}
+                {overdueCount + recurringDue.length + budgetRows.filter(b => b.left < 0).length}
               </span>
             )}
           </button>
@@ -3174,8 +2444,32 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                                 {it.amount.toLocaleString()} + {t.importFee} {it.fee.toLocaleString()}
                               </span>
                             )}
+                            {it.originalAmount != null && (
+                              <span style={{ display: 'block', fontSize: '10px', color: c.sec, marginTop: '2px' }}>
+                                {t.importConverted} {it.originalAmount.toLocaleString()} {it.originalCurrency}
+                              </span>
+                            )}
                           </span>
                         </div>
+
+                        {it.status === 'check' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '7px' }}>
+                            <input
+                              type="number" inputMode="decimal" step="any" min="0"
+                              value={it.total ?? it.amount}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                const n = isFinite(v) && v >= 0 ? v : 0;
+                                updateImportItem(idx, { amount: n, total: n, baseAmount: n, fee: 0 });
+                              }}
+                              style={{ width: '120px', padding: '5px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #E67E22', backgroundColor: c.bg, color: c.text }}
+                            />
+                            <span style={{ fontSize: '11px', color: c.sec }}>{it.currency}</span>
+                            {it.converted === 'none' && (
+                              <span style={{ fontSize: '10px', color: '#E67E22' }}>{t.importNoRate}</span>
+                            )}
+                          </div>
+                        )}
 
                         {(it.description || it.counterparty) && (
                           <div style={{ fontSize: '12px', marginTop: '4px', wordBreak: 'break-word', lineHeight: '1.4' }}>
@@ -3271,9 +2565,44 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </div>
             )}
 
+            {recurringUpcoming.length > 0 && recurringDue.length === 0 && (
+              <div style={{ backgroundColor: c.card, border: '1px dashed ' + c.saveBtn + '70', borderRadius: '12px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', lineHeight: '1.5' }}>
+                🔁 {t.recurUpcoming}, {t.recurTomorrow}: {recurringUpcoming.map(r => r.category + ' ' + parseFloat(r.amount).toLocaleString() + ' ' + r.currency).join(', ')}
+              </div>
+            )}
+
+            {budgetRows.some(b => b.pct >= 90) && (() => {
+              const over = budgetRows.filter(b => b.left < 0);
+              const near = budgetRows.filter(b => b.left >= 0 && b.pct >= 90);
+              const alertColor = over.length ? c.expenseColor : '#E67E22';
+              return (
+                <div
+                  className={over.length ? 'wallet-glow' : undefined}
+                  onClick={() => setActiveTab('plans')}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab('plans'); }}
+                  style={{ '--glow': alertColor + '55', backgroundColor: c.card, border: '1px solid ' + alertColor + '90', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px', cursor: 'pointer' }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: alertColor }}>
+                    🎯 {over.length ? t.budgetAlertTitle : t.budgetWarnTitle}
+                  </div>
+                  {[...over, ...near].map(b => (
+                    <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px', padding: '3px 0' }}>
+                      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{b.cat}</span>
+                      <span style={{ whiteSpace: 'nowrap', color: b.left < 0 ? c.expenseColor : '#E67E22', fontWeight: 600 }}>
+                        {b.left < 0
+                          ? '+' + Math.round(-b.left).toLocaleString()
+                          : Math.round(b.spent).toLocaleString() + ' / ' + Math.round(b.limit).toLocaleString()} {currency}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
             {recurringDue.length > 0 && (
-              <div style={{ backgroundColor: c.card, border: '1px solid ' + c.saveBtn + '70', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>🔁 {t.recurDue}</div>
+              <div className="wallet-glow" style={{ '--glow': c.saveBtn + '55', backgroundColor: c.card, border: '1px solid ' + c.saveBtn + '90', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: c.saveBtn }}>🔁 {t.recurDue}</div>
                 {recurringDue.map(r => (
                   <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '6px 0', flexWrap: 'wrap', borderTop: '1px solid ' + c.border }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -3691,20 +3020,86 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               ) : (
                 reconciliation.map(rc => {
                   const ok = !rc.comparable || Math.abs(rc.diff) < 0.01;
+                  const isOpen = reconOpen === rc.key;
+                  const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString();
                   return (
-                    <div key={rc.card + rc.currency} style={{ padding: '10px 0', borderTop: '1px solid ' + c.border }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{t.reconCard} ***{rc.card}</span>
-                        <span style={{ fontSize: '11px', color: ok ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {ok ? '✓ ' + t.reconOk : '⚠ ' + Math.abs(Math.round(rc.diff)).toLocaleString() + ' ' + rc.currency}
-                        </span>
+                    <div key={rc.key} style={{ padding: '10px 0', borderTop: '1px solid ' + c.border }}>
+                      <div
+                        onClick={() => setReconOpen(isOpen ? null : rc.key)}
+                        role="button" tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReconOpen(isOpen ? null : rc.key); } }}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                            <span style={{ fontSize: '10px', color: c.sec, display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', marginRight: '6px' }}>▶</span>
+                            {t.reconCard} ***{rc.card}
+                          </span>
+                          <span style={{ fontSize: '11px', color: ok ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {ok ? '✓ ' + t.reconOk : '⚠ ' + (rc.diff > 0 ? '+' : '−') + fmt(Math.abs(rc.diff)) + ' ' + rc.currency}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px', lineHeight: '1.5', paddingLeft: '16px' }}>
+                          {t.reconBank}: {fmt(rc.bank)} {rc.currency} ({t.reconAsOf} {rc.date}{rc.time ? ' ' + rc.time : ''})
+                        </div>
+                        {!ok && !isOpen && (
+                          <div style={{ fontSize: '11px', color: c.expenseColor, marginTop: '3px', lineHeight: '1.5', paddingLeft: '16px' }}>
+                            {t.reconGap}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ fontSize: '11px', color: c.sec, marginTop: '4px', lineHeight: '1.5' }}>
-                        {t.reconBank}: {Math.round(rc.bank).toLocaleString()} {rc.currency} ({t.reconAsOf} {rc.date}{rc.time ? ' ' + rc.time : ''})
-                      </div>
-                      {!ok && (
-                        <div style={{ fontSize: '11px', color: c.expenseColor, marginTop: '4px', lineHeight: '1.5' }}>
-                          {t.reconGap}. {t.reconOurs}: {Math.round(rc.expected).toLocaleString()} {rc.currency}
+
+                      {isOpen && (
+                        <div style={{ marginTop: '10px', paddingLeft: '16px' }}>
+                          {rc.steps.length <= 1 ? (
+                            <div style={{ fontSize: '11px', color: c.sec, lineHeight: '1.5' }}>{t.reconNoCardOps}</div>
+                          ) : (
+                            <div style={{ borderLeft: '2px solid ' + c.border, paddingLeft: '10px', maxHeight: '320px', overflowY: 'auto' }}>
+                              {rc.steps.slice(-40).map((st, si) => {
+                                const hasGap = st.gap != null && Math.abs(st.gap) >= 0.01;
+                                return (
+                                  <div key={si} style={{
+                                    padding: '6px 8px', marginBottom: '4px', borderRadius: '6px',
+                                    backgroundColor: hasGap ? c.expenseColor + '14' : 'transparent',
+                                    border: hasGap ? '1px solid ' + c.expenseColor + '40' : '1px solid transparent'
+                                  }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px' }}>
+                                      <span style={{ color: c.sec, minWidth: 0, overflowWrap: 'anywhere' }}>
+                                        {st.tx.date}{st.tx.time ? ' ' + st.tx.time : ''} · {st.isStart ? t.reconStartPoint : (st.tx.description || st.tx.category)}
+                                      </span>
+                                      {!st.isStart && (
+                                        <span style={{ whiteSpace: 'nowrap', color: st.tx.type === 'income' ? c.incomeColor : c.expenseColor }}>
+                                          {st.tx.type === 'income' ? '+' : '−'}{fmt(st.tx.amount)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {st.bank != null && (
+                                      <div style={{ fontSize: '10px', color: c.sec, marginTop: '2px' }}>
+                                        {t.reconBank}: {fmt(st.bank)}{!st.isStart ? ' · ' + t.reconOurs + ': ' + fmt(st.running) : ''}
+                                      </div>
+                                    )}
+                                    {hasGap && (
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '5px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: '11px', color: c.expenseColor, fontWeight: 600 }}>
+                                          {t.reconGapHere}: {st.gap > 0 ? '+' : '−'}{fmt(Math.abs(st.gap))} {rc.currency}
+                                        </span>
+                                        <button
+                                          onClick={() => addReconDifference(rc, st)}
+                                          style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer' }}
+                                        >{t.reconAddMissing}</button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {!ok && (
+                            <button
+                              onClick={() => acceptBankBalance(rc)}
+                              style={{ marginTop: '10px', width: '100%', padding: '9px', fontSize: '12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.text, cursor: 'pointer' }}
+                            >✓ {t.reconAccept}</button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3816,9 +3211,18 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               )}
             </div>
 
-            <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', border: '1px solid ' + c.border }}>
-              <h3 style={{ margin: '0 0 14px 0', fontSize: '15px' }}>{t.recent}</h3>
-              {transactions.length === 0 ? (
+            <div style={{ backgroundColor: c.card, padding: recentOpen ? '18px' : '14px 18px', borderRadius: '12px', border: '1px solid ' + c.border }}>
+              <div
+                onClick={() => { setRecentOpen(!recentOpen); if (recentOpen) setRecentShowAll(false); }}
+                role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRecentOpen(!recentOpen); } }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: recentOpen ? '14px' : 0 }}
+              >
+                <span style={{ fontSize: '11px', color: c.sec, display: 'inline-block', transform: recentOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+                <h3 style={{ margin: 0, fontSize: '15px', flex: 1 }}>{t.recent}</h3>
+                <span style={{ fontSize: '11px', color: c.sec, border: '1px solid ' + c.border, borderRadius: '10px', padding: '2px 8px' }}>{transactions.length}</span>
+              </div>
+              {!recentOpen ? null : transactions.length === 0 ? (
                 <div style={{ color: c.sec, textAlign: 'center', padding: '20px' }}>{t.noOperations}</div>
               ) : (
                 (() => {
@@ -3891,10 +3295,10 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                             )}
                           </div>
                         </div>
-                        {isExpanded && monthTxs.map((tx, i) => {
+                        {isExpanded && (alwaysExpanded && !recentShowAll ? monthTxs.slice(0, 7) : monthTxs).map((tx, i, shown) => {
                           const amountColor = tx.type === 'income' ? c.incomeColor : getExpenseColor(tx);
                           return (
-                            <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < monthTxs.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
+                            <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < shown.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
                                 <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
@@ -3903,6 +3307,9 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                                 <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
                                   {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
                                 </div>
+                                {tx.originalAmount != null && (
+                                  <div style={{ fontSize: '10px', color: c.sec }}>{tx.originalAmount.toLocaleString()} {tx.originalCurrency}</div>
+                                )}
                                 <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
                                   <button onClick={(e) => { e.stopPropagation(); startEdit(tx); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
                                   <button onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
@@ -3911,6 +3318,14 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                             </div>
                           );
                         })}
+                        {isExpanded && alwaysExpanded && monthTxs.length > 7 && (
+                          <button
+                            onClick={() => setRecentShowAll(!recentShowAll)}
+                            style={{ width: '100%', marginTop: '6px', padding: '8px', fontSize: '12px', borderRadius: '8px', border: '1px dashed ' + c.border, backgroundColor: 'transparent', color: c.saveBtn, cursor: 'pointer' }}
+                          >
+                            {recentShowAll ? t.recentShowLess : t.recentShowAll + ' (' + monthTxs.length + ')'}
+                          </button>
+                        )}
                       </React.Fragment>
                     );
                   };
@@ -4296,12 +3711,19 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               {recurring.map(r => (
                 <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '9px 0', borderTop: '1px solid ' + c.border }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500 }}>{r.category}{r.description ? ' · ' + r.description : ''}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 500, opacity: r.active === false ? 0.5 : 1 }}>
+                      {r.category}{r.description ? ' · ' + r.description : ''}
+                      {r.active === false && <span style={{ fontSize: '10px', color: c.sec, marginLeft: '6px' }}>({t.recurPaused})</span>}
+                    </div>
                     <div style={{ fontSize: '11px', color: c.sec }}>
                       {parseFloat(r.amount).toLocaleString()} {r.currency} · {t.recurEvery} {r.day} {t.recurDayShort}
                       {' · '}{r.lastPosted ? t.recurLast + ' ' + r.lastPosted : t.recurNever}
                     </div>
                   </div>
+                  <button
+                    onClick={() => toggleRecurring(r.id)}
+                    style={{ padding: '4px 9px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: r.active === false ? c.incomeColor : c.sec, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >{r.active === false ? t.recurResume : t.recurPause}</button>
                   <button onClick={() => deleteRecurring(r.id)} style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}>✕</button>
                 </div>
               ))}
