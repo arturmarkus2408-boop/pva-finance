@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Cart
 import * as XLSX from 'xlsx';
 import './App.css';
 import { tr as translations } from './i18n';
-import { todayLocal, toIsoDate } from './lib/date';
+import { todayLocal, toIsoDate, newId, parseAmount, normalizeCurrencyName } from './lib/date';
 import { parseBankSms } from './lib/smsParser';
 import { isSameTx } from './lib/matching';
 import { computeReconciliation } from './lib/reconciliation';
@@ -51,6 +51,13 @@ const App = () => {
   const [aiAnalysisPeriod, setAiAnalysisPeriod] = useState('');
   const [aiExpanded, setAiExpanded] = useState(false);
   const [importItems, setImportItems] = useState(null);
+  // Голосовой ввод: живой текст во время диктовки и итоговая фраза для окна сверки
+  const [voiceText, setVoiceText] = useState('');
+  const [voiceHeard, setVoiceHeard] = useState('');
+  const recRef = useRef(null);
+  const voiceFinalRef = useRef('');
+  const voiceInterimRef = useRef('');
+  const voiceCancelledRef = useRef(false);
   const [customCats, setCustomCats] = useState({ income: null, expense: null });
   const [newCatName, setNewCatName] = useState({ income: '', expense: '' });
   const [ownerName, setOwnerName] = useState('');
@@ -160,7 +167,12 @@ const App = () => {
       isFirstRender.current = false;
       return;
     }
-    localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors }));
+    try {
+      localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors }));
+    } catch {
+      // Раньше ошибка здесь роняла всё приложение в белый экран, а данные молча не сохранялись
+      setTimeout(() => setScanError(translations[language].storageFull), 0);
+    }
   }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors]);
 
   // Автосворачивание раскрытых прошлых месяцев и годов при любом действии вне списка
@@ -222,14 +234,14 @@ const App = () => {
   const submitTransaction = (e) => {
     e.preventDefault();
     const finalCategory = isNewCat ? formData.customCategory.trim() : formData.category;
-    if (!formData.amount || !finalCategory) return;
+    if (!(parseAmount(formData.amount) > 0) || !finalCategory) return;
     if (isNewCat) addCategory(formType, finalCategory);
     if (editingId) {
-      setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseFloat(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date } : tx));
+      setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseAmount(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date } : tx));
       setEditingId(null);
     } else {
-      const amountNum = parseFloat(formData.amount);
-      setTransactions([...transactions, { id: Date.now(), type: formType, amount: amountNum, category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
+      const amountNum = parseAmount(formData.amount);
+      setTransactions([...transactions, { id: newId(), type: formType, amount: amountNum, category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
       // Эта трата перевалила за месячный лимит? Предупреждаем сразу, а не когда пользователь сам заметит
       if (formType === 'expense') {
         const lim = parseFloat(budgets[currency + '|' + finalCategory]);
@@ -268,7 +280,12 @@ const App = () => {
   // ===== ПЛАНЫ И ДОЛГИ =====
   // Три вида записей: запланированная покупка, мой долг кому-то, чужой долг мне.
   // Запись висит активной, пока пользователь сам её не закроет.
-  const [todayStr] = useState(() => todayLocal());
+  // Пересчитывается при каждой отрисовке: приложение на телефоне может жить в фоне
+  // днями, и замороженная при запуске дата ломала сроки долгов и даты закрытия.
+  const todayStr = todayLocal();
+  // Возврат в приложение из фона: перерисовать всё, что зависит от даты,
+  // и проверить почтовый ящик с SMS (раньше он проверялся только при полном перезапуске)
+  const [, setResumeTick] = useState(0);
 
   const daysUntil = (dateStr) => {
     if (!dateStr) return null;
@@ -316,7 +333,7 @@ const App = () => {
     if (editingPlanId) {
       setPlans(plans.map(pl => pl.id === editingPlanId ? { ...pl, ...payload } : pl));
     } else {
-      setPlans([...plans, { id: Date.now(), ...payload, done: false, doneAt: null, createdAt: todayStr }]);
+      setPlans([...plans, { id: newId(), ...payload, done: false, doneAt: null, createdAt: todayStr }]);
     }
     setShowPlanForm(false);
     setEditingPlanId(null);
@@ -330,7 +347,7 @@ const App = () => {
       const txType = plan.kind === 'owedme' ? 'income' : 'expense';
       const label = [plan.what, plan.person].filter(Boolean).join(' · ');
       setTransactions(prev => [...prev, {
-        id: Date.now(),
+        id: newId(),
         type: txType,
         amount: plan.amount,
         category: t.planTxCategory,
@@ -401,8 +418,11 @@ const App = () => {
   const renameCurrency = (from) => {
     const raw = window.prompt(t.currencyRenamePrompt, from);
     if (raw == null) return;
-    const to = raw.trim().toUpperCase();
-    if (!to || to === from) return;
+    const cleaned = normalizeCurrencyName(raw);
+    if (!cleaned) { window.alert(t.currencyNameInvalid); return; }
+    // Совпадение без учёта регистра — это объединение с уже существующей валютой
+    const to = currencies.find(cur => cur !== from && cur.toLowerCase() === cleaned.toLowerCase()) || cleaned;
+    if (to === from) return;
     if (currencies.includes(to)) {
       const msg = t.currencyMergeConfirm.split('{from}').join(from).split('{to}').join(to);
       if (!window.confirm(msg)) return;
@@ -469,8 +489,17 @@ const App = () => {
   };
 
   const addCurrency = () => {
-    const val = newCurrency.trim().toUpperCase();
-    if (val && !currencies.includes(val)) {
+    const val = normalizeCurrencyName(newCurrency);
+    if (!val) {
+      if (newCurrency.trim()) { window.alert(t.currencyNameInvalid); return; }
+      setShowCurrencyInput(false);
+      return;
+    }
+    // «Kapital uzcard» и «KAPITAL UZCARD» — одна и та же валюта
+    const existing = currencies.find(cur => cur.toLowerCase() === val.toLowerCase());
+    if (existing) {
+      setCurrency(existing);
+    } else {
       setCurrencies([...currencies, val]);
       setCurrency(val);
     }
@@ -498,32 +527,36 @@ const App = () => {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     switch (period) {
       case 'today':
-        return { fromStr: toIsoDate(today), label: today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
+        return { fromStr: toIsoDate(today), toStr: toIsoDate(today), label: today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
       case 'week': {
         const day = today.getDay() || 7; // Пн=1..Вс=7
         const monday = new Date(today);
         monday.setDate(today.getDate() - (day - 1));
-        return { fromStr: toIsoDate(monday), label: monday.toLocaleDateString(language === 'en' ? 'en-GB' : language) + ' — ' + today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        return { fromStr: toIsoDate(monday), toStr: toIsoDate(sunday), label: monday.toLocaleDateString(language === 'en' ? 'en-GB' : language) + ' — ' + today.toLocaleDateString(language === 'en' ? 'en-GB' : language) };
       }
       case 'month': {
         const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { fromStr: toIsoDate(first), label: first.toLocaleDateString(language === 'en' ? 'en-GB' : language, { month: 'long', year: 'numeric' }) };
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return { fromStr: toIsoDate(first), toStr: toIsoDate(lastDay), label: first.toLocaleDateString(language === 'en' ? 'en-GB' : language, { month: 'long', year: 'numeric' }) };
       }
       case 'year': {
         const first = new Date(now.getFullYear(), 0, 1);
-        return { fromStr: toIsoDate(first), label: String(now.getFullYear()) };
+        return { fromStr: toIsoDate(first), toStr: now.getFullYear() + '-12-31', label: String(now.getFullYear()) };
       }
       case 'all':
       default:
-        return { fromStr: null, label: t.periodAll };
+        return { fromStr: null, toStr: null, label: t.periodAll };
     }
   };
 
-  const { fromStr: periodFromStr, label: periodLabel } = getPeriodRange(dashboardPeriod);
+  const { fromStr: periodFromStr, toStr: periodToStr, label: periodLabel } = getPeriodRange(dashboardPeriod);
 
   const periodTransactions = transactions.filter(tx => {
     if (tx.currency !== currency) return false;
     if (periodFromStr && tx.date < periodFromStr) return false;
+    if (periodToStr && tx.date > periodToStr) return false;
     return true;
   });
 
@@ -725,7 +758,7 @@ const App = () => {
     const type = gap < 0 ? 'expense' : 'income';
     const list = catsFor(type);
     setTransactions(prev => [...prev, {
-      id: Date.now(),
+      id: newId(),
       type,
       amount: Math.abs(gap),
       category: list[list.length - 1],
@@ -781,7 +814,7 @@ const App = () => {
 
   const postRecurring = (r) => {
     setTransactions(prev => [...prev, {
-      id: Date.now(),
+      id: newId(),
       type: r.type || 'expense',
       amount: parseFloat(r.amount),
       category: r.category,
@@ -1082,9 +1115,11 @@ const App = () => {
     const time = typeof raw?.time === 'string' && /^\d{2}:\d{2}$/.test(raw.time) ? raw.time : null;
     const cardDigits = raw?.card ? String(raw.card).replace(/\D/g, '') : '';
     const card = cardDigits.length >= 4 ? cardDigits.slice(-4) : null;
-    const currencyVal = typeof raw?.currency === 'string' && /^[A-Za-z]{3}$/.test(raw.currency.trim())
-      ? raw.currency.trim().toUpperCase()
-      : currency;
+    // Сначала ищем среди валют пользователя (включая свои названия вроде «Kapital uzcard»),
+    // потом принимаем стандартный трёхбуквенный код, иначе — текущая валюта
+    const rawCur = typeof raw?.currency === 'string' ? raw.currency.trim() : '';
+    const knownCur = rawCur ? currencies.find(cur => cur.toLowerCase() === rawCur.toLowerCase()) : null;
+    const currencyVal = knownCur || (/^[A-Za-z]{3}$/.test(rawCur) ? rawCur.toUpperCase() : currency);
     const catList = fallbackCats(type);
     const category = (typeof raw?.category === 'string' && raw.category.trim())
       ? raw.category.trim()
@@ -1209,6 +1244,18 @@ const App = () => {
     if (inboxKey) fetchInbox(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inboxKey]);
+
+  // Возврат в приложение из фона. Подписка обновляется на каждой отрисовке,
+  // чтобы сверка новых SMS шла с актуальным списком операций, а не со старым.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setResumeTick(x => x + 1);
+      if (inboxKey) fetchInbox(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  });
 
   // Разбор вставленного или полученного извне текста SMS
   const handleSmsText = (text) => {
@@ -1402,7 +1449,8 @@ const App = () => {
           category: isKnown ? only.category : '__new__',
           customCategory: isKnown ? '' : only.category,
           description: only.description || '',
-          date: only.date
+          date: only.date,
+          tag: ''
         });
         setShowForm(true);
         setActiveTab('dashboard');
@@ -1443,13 +1491,12 @@ const App = () => {
       setTimeout(() => setScanError(''), 4000);
       return;
     }
-    const base = Date.now();
-    const newTx = chosen.map((i, idx) => {
+    const newTx = chosen.map((i) => {
       const parts = [i.description, i.counterparty].filter(Boolean);
       if (i.exchangedTo) parts.push(t.importExchange + ' ' + i.exchangedTo);
       if (i.fee > 0) parts.push(t.importFee + ' ' + i.fee.toLocaleString());
       return {
-        id: base + idx,
+        id: newId(),
         type: i.type,
         amount: i.total,          // списанная сумма с учётом комиссии
         baseAmount: i.baseAmount, // сумма без комиссии — нужна для сверки с SMS
@@ -1465,7 +1512,7 @@ const App = () => {
         balanceAfter: i.balanceAfter ?? null,
         originalAmount: i.originalAmount ?? null,
         originalCurrency: i.originalCurrency || null,
-        source: 'import'
+        source: i.source || 'import'
       };
     });
     const unknownCurrencies = [...new Set(newTx.map(x => x.currency))].filter(cur => !currencies.includes(cur));
@@ -1481,14 +1528,19 @@ const App = () => {
   };
 
   // ===== ГОЛОСОВОЙ ВВОД =====
+  // ===== ГОЛОСОВОЙ ВВОД =====
+  // Слушаем непрерывно, пока человек сам не нажмёт «Готово»: паузы, раздумья
+  // и несколько операций подряд — нормальная речь, а не повод оборвать запись.
   const startVoiceInput = () => {
+    // Повторное нажатие на микрофон во время записи = «Готово»
+    if (listening) { recRef.current?.stop(); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setScanError(t.voiceNotSupported);
       setTimeout(() => setScanError(''), 5000);
       return;
     }
-    if (!geminiKey) {
+    if (!geminiKey && !groqKey && !orKey) {
       setScanError(t.noKeyError);
       setShowSettings(true);
       setTimeout(() => setScanError(''), 5000);
@@ -1497,97 +1549,158 @@ const App = () => {
     const langMap = { ru: 'ru-RU', uz: 'uz-UZ', en: 'en-US', tr: 'tr-TR' };
     const rec = new SR();
     rec.lang = langMap[language] || 'ru-RU';
-    rec.continuous = false;
-    rec.interimResults = false;
+    rec.continuous = true;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+    voiceFinalRef.current = '';
+    voiceInterimRef.current = '';
+    voiceCancelledRef.current = false;
+    setVoiceText('');
+
     rec.onstart = () => { setListening(true); setScanError(''); setScanNotice(''); };
-    rec.onend = () => setListening(false);
+
+    rec.onresult = (e) => {
+      // Текст собирается заново из всего списка на каждом событии — так не бывает дублей.
+      // Особенность Chrome на Android: следующий кусок иногда уже содержит предыдущий
+      // целиком. Тогда кусок заменяется, а не дописывается.
+      const finals = [];
+      let interim = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const piece = (e.results[i][0]?.transcript || '').trim();
+        if (!piece) continue;
+        if (e.results[i].isFinal) {
+          const prev = finals[finals.length - 1];
+          if (prev && piece.toLowerCase().startsWith(prev.toLowerCase())) finals[finals.length - 1] = piece;
+          else finals.push(piece);
+        } else {
+          interim = piece;
+        }
+      }
+      voiceFinalRef.current = finals.join(' ');
+      voiceInterimRef.current = interim;
+      setVoiceText((voiceFinalRef.current + ' ' + interim).trim());
+    };
+
     rec.onerror = (e) => {
-      setListening(false);
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setScanError(t.micDenied);
-      else if (e.error === 'no-speech') setScanError(t.noSpeech);
-      else setScanError(t.voiceParseError);
-      setTimeout(() => setScanError(''), 5000);
+      if (e.error === 'aborted') return;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        voiceCancelledRef.current = true;
+        setScanError(t.micDenied);
+        setTimeout(() => setScanError(''), 5000);
+      } else if (e.error === 'no-speech' && !voiceFinalRef.current && !voiceInterimRef.current) {
+        voiceCancelledRef.current = true;
+        setScanError(t.noSpeech);
+        setTimeout(() => setScanError(''), 5000);
+      }
+      // Прочие ошибки посреди диктовки не страшны: то, что уже услышано, разберём в onend
     };
-    rec.onresult = async (e) => {
-      const text = e.results?.[0]?.[0]?.transcript;
+
+    rec.onend = () => {
       setListening(false);
-      if (text) await parseVoiceText(text);
+      recRef.current = null;
+      const fin = voiceFinalRef.current.trim();
+      const tail = voiceInterimRef.current.trim();
+      // Если «Готово» нажали посреди фразы, последний кусок мог не успеть стать окончательным
+      const text = (tail && !fin.toLowerCase().endsWith(tail.toLowerCase()) ? fin + ' ' + tail : fin).trim();
+      setVoiceText('');
+      if (voiceCancelledRef.current || !text) return;
+      parseVoiceText(text);
     };
-    try { rec.start(); } catch (err) {
+
+    recRef.current = rec;
+    try {
+      rec.start();
+    } catch {
       setListening(false);
+      recRef.current = null;
       setScanError(t.voiceParseError);
       setTimeout(() => setScanError(''), 5000);
     }
   };
 
+  const cancelVoiceInput = () => {
+    voiceCancelledRef.current = true;
+    recRef.current?.abort();
+  };
+
+  // Разбор надиктованного: ИИ находит ВСЕ операции в хаотичной речи,
+  // а результат, как и у SMS и фото, идёт в окно сверки — ничего не вносится молча.
   const parseVoiceText = async (text) => {
     setScanning(true);
     try {
-      const knownCats = [...new Set([...catsFor('income'), ...catsFor('expense'), ...transactions.map(tx => tx.category)])].filter(Boolean);
       const today = todayLocal();
-      const prompt = `Ты парсер фраз финансового приложения. Разбери фразу пользователя.
+      const cardsInfo = myCards.length
+        ? myCards.map(mc => {
+            const cur = cardCurrencyOf(mc.last4);
+            return '***' + mc.last4 + (mc.label ? ' «' + mc.label + '»' : '') + (cur ? ' — валюта «' + cur + '»' : '');
+          }).join('; ')
+        : 'не указаны';
+      const langWord = language === 'ru' ? 'русский' : language === 'uz' ? "o'zbek" : language === 'en' ? 'English' : 'Türkçe';
+      const prompt = `Ты разбираешь речь, которую пользователь финансового приложения надиктовал голосом.
+Речь живая и хаотичная: паузы, повторы, слова-паразиты, оговорки, поправки, несколько операций подряд вперемешку.
+Твоя задача — понять СУТЬ и извлечь ВСЕ денежные операции, которые человек уже совершил.
 
-Определи и верни СТРОГО JSON без markdown:
-{
-  "type": "income" (для приход/доход/зарплата/получил/фриланс) или "expense" (для расход/потратил/трата/купил/оплатил),
-  "amount": число без разделителей (примеры нормализации: "500 тысяч" → 500000, "2 миллиона" → 2000000, "полмиллиона" → 500000, "500к" → 500000, "5 млн" → 5000000),
-  "currency": "UZS" (сум/сумов/uzs/so'm), "USD" (долларов/долл/$/usd), "EUR" (евро/€/eur), "RUB" (рублей/руб/rub) или null если не указана,
-  "date": "YYYY-MM-DD" или null. Правила: "сегодня"→сегодня, "вчера"→вчера, "позавчера"→позавчера, "7 июля" или "седьмого июля" → ближайшая прошлая или сегодняшняя дата с этим числом/месяцем, "в понедельник"→ближайший прошлый понедельник. null если дата не упомянута,
-  "category": одна категория из списка ${JSON.stringify(knownCats)} если упомянута в фразе, иначе null,
-  "description": остаток фразы после извлечения всех полей выше, или null если только тип и сумма
-}
+ПРАВИЛА:
+1. Каждая отдельная трата или поступление — отдельный объект в items.
+2. Поправки: «пятьдесят, нет, шестьдесят тысяч» → 60000. Всегда бери последний названный вариант.
+   «Ой, не на бензин, а на продукты» → категория продукты.
+3. Числа словами и сокращения: «пятьдесят тысяч» → 50000, «полтора миллиона» → 1500000, «полтинник» → 50000,
+   «три с половиной доллара» → 3.5, «двадцать долларов пятьдесят центов» → 20.5, «500к» → 500000, «2 ляма» → 2000000.
+   Распознаватель речи иногда пишет цифрами с пробелами: «50 000», «1 500 000» — это одно число.
+4. Тип: потратил, купил, оплатил, заплатил, отдал, перевёл, скинул, снял → "expense";
+   получил, пришло, зарплата, вернули мне, поступило, заработал, дали → "income".
+5. Валюты пользователя: ${JSON.stringify(currencies)}. В поле currency возвращай ТОЧНО одно название из этого списка.
+   Если человек говорит своими словами («с капитал визы», «с узкарда», «в долларах», «сумов») — выбери подходящее по смыслу.
+   Валюта не названа → null (будет использована текущая: «${currency}»).
+6. Карты пользователя: ${cardsInfo}.
+   Назвал карту (по цифрам или по названию) → верни её 4 цифры в card и валюту этой карты в currency.
+7. Дата: «сегодня», «вчера», «позавчера», «в понедельник», «пятнадцатого» → YYYY-MM-DD. Не названа → null.
+   Сегодня ${today}. Дата не может быть в будущем.
+8. Категория расходов — из списка ${JSON.stringify(catsFor('expense'))}; доходов — из ${JSON.stringify(catsFor('income'))}.
+   Ничего не подходит — предложи одно короткое слово.
+9. description — коротко и по сути, что куплено или за что: «бензин», «обед с Андреем», «аренда офиса». Без суммы и даты.
+10. Долги: «отдал Андрею долг», «Костя вернул сто долларов» → "isDebt": true, имя человека в counterparty.
+11. НЕ выдумывай. Планы на будущее («надо будет купить», «завтра заплачу»), вопросы и рассуждения — это НЕ операции.
+12. Если сумма расслышана неуверенно или непонятно, трата это или приход — всё равно верни операцию, но с "needsCheck": true.
 
-Сегодняшняя дата: ${today}
-Фраза: "${text.replace(/"/g, '\\"')}"`;
+Все текстовые поля — на языке: ${langWord}.
+
+Верни СТРОГО JSON без markdown:
+{"items":[{"type":"expense" или "income","amount":число,"currency":"название из списка" или null,"date":"YYYY-MM-DD" или null,"card":"1234" или null,"category":"...","description":"...","counterparty":"" ,"isDebt":false,"needsCheck":false}]}
+
+Речь пользователя:
+«${text.replace(/[«»]/g, '"')}»`;
 
       const raw = await callTextWithFallback(
         {
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } }
         },
-        'Ты парсер фраз финансового приложения. Отвечай строго в формате JSON без markdown.',
+        'Ты разбираешь надиктованную речь для финансового приложения. Отвечай строго JSON без markdown.',
         prompt,
         true
       );
       let jsonText = String(raw).trim();
       if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(jsonText);
-      const amount = typeof parsed.amount === 'number' ? parsed.amount : parseFloat(parsed.amount);
-      if (!amount || isNaN(amount)) throw new Error('no-amount-found');
-      const txType = parsed.type === 'income' ? 'income' : 'expense';
-      const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayLocal();
-      if (parsed.currency && currencies.includes(parsed.currency)) setCurrency(parsed.currency);
-      const langCats = catsFor(txType);
-      let categoryValue = '';
-      let customCategoryValue = '';
-      if (parsed.category && langCats.includes(parsed.category)) {
-        categoryValue = parsed.category;
-      } else if (parsed.category) {
-        categoryValue = '__new__';
-        customCategoryValue = parsed.category;
-      }
-      setFormType(txType);
-      setEditingId(null);
-      setFormData({
-        amount: String(amount),
-        category: categoryValue,
-        customCategory: customCategoryValue,
-        description: parsed.description || '',
-        date
-      });
-      setShowForm(true);
+      const rawItems = Array.isArray(parsed?.items) ? parsed.items : (parsed?.amount ? [parsed] : []);
+      const normalized = rawItems
+        .map(r => normalizeScannedItem(r, catsFor))
+        .filter(Boolean)
+        .map(x => ({ ...x, source: 'voice' }));
+      if (normalized.length === 0) throw new Error('voice-nothing');
+      setVoiceHeard(text);
+      setImportItems(buildReview(normalized));
       setActiveTab('dashboard');
-      setScanNotice(t.recognized);
-      setTimeout(() => setScanNotice(''), 4000);
     } catch (err) {
       console.error('Voice parse error', err);
       const msg = err?.message || '';
       let userMsg = t.voiceParseError;
-      if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
+      if (msg === 'voice-nothing') userMsg = t.voiceNothing + ': «' + text.slice(0, 120) + '»';
+      else if (/api key|permission|unauthenticated|401|403/i.test(msg)) userMsg = t.scanFailedAuth;
       else if (/network|failed to fetch|load failed/i.test(msg)) userMsg = t.scanFailedNetwork;
-      setScanError(userMsg + (msg ? ' [' + msg.slice(0, 90) + ']' : ''));
-      setTimeout(() => setScanError(''), 8000);
+      setScanError(userMsg + (msg && msg !== 'voice-nothing' ? ' [' + msg.slice(0, 90) + ']' : ''));
+      setTimeout(() => setScanError(''), 9000);
     } finally {
       setScanning(false);
     }
@@ -2098,6 +2211,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
           50% { box-shadow: 0 0 18px 3px var(--glow, transparent); }
         }
         .wallet-glow { animation: walletGlow 2.8s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.75; transform: scale(1.06); } }
         @media (prefers-reduced-motion: reduce) { .wallet-glow { animation: none; } }
       `}</style>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
@@ -2117,7 +2231,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               <option value="en">EN</option>
               <option value="tr">TR</option>
             </select>
-            <select value={currency} onChange={(e) => { if (e.target.value === '__add__') setShowCurrencyInput(true); else setCurrency(e.target.value); }} style={{ padding: '7px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', fontSize: '13px' }}>
+            <select value={currency} onChange={(e) => { if (e.target.value === '__add__') setShowCurrencyInput(true); else setCurrency(e.target.value); }} style={{ padding: '7px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', fontSize: '13px', flex: '1 1 90px', minWidth: 0, maxWidth: '100%', textOverflow: 'ellipsis' }}>
               {currencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
               <option value="__add__">{t.addCurrency}</option>
             </select>
@@ -2353,7 +2467,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
 
         {showCurrencyInput && (
           <div style={{ backgroundColor: c.card, padding: '14px', borderRadius: '10px', marginBottom: '14px', border: '1px solid ' + c.border, display: 'flex', gap: '8px' }}>
-            <input type="text" value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)} placeholder={t.currencyPlaceholder} style={{ ...inputStyle, flex: 1 }} autoFocus maxLength={6} onKeyDown={(e) => e.key === 'Enter' && addCurrency()} />
+            <input type="text" value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)} placeholder={t.currencyPlaceholder} style={{ ...inputStyle, flex: 1 }} autoFocus maxLength={30} onKeyDown={(e) => e.key === 'Enter' && addCurrency()} />
             <button onClick={addCurrency} style={{ padding: '10px 16px', backgroundColor: c.saveBtn, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>{t.save}</button>
             <button onClick={() => setShowCurrencyInput(false)} style={{ padding: '10px 16px', backgroundColor: c.sec, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>{t.cancel}</button>
           </div>
@@ -2401,6 +2515,11 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </div>
 
               <div style={{ overflowY: 'auto', padding: '12px 14px', flex: 1 }}>
+                {voiceHeard && importItems.some(i => i.source === 'voice') && (
+                  <div style={{ fontSize: '12px', lineHeight: '1.5', marginBottom: '10px', padding: '9px 11px', borderRadius: '8px', backgroundColor: c.card, border: '1px solid ' + c.border, overflowWrap: 'anywhere' }}>
+                    <span style={{ color: c.sec }}>🎙️ {t.voiceHeard}: </span>«{voiceHeard}»
+                  </div>
+                )}
                 {importItems.some(i => i.status === 'dup') && (
                   <div style={{ fontSize: '11px', color: c.sec, lineHeight: '1.5', marginBottom: '10px', padding: '8px 10px', borderRadius: '8px', backgroundColor: c.card, border: '1px solid ' + c.border }}>
                     {t.importDupHint}
@@ -2452,7 +2571,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                           </span>
                         </div>
 
-                        {it.status === 'check' && (
+                        {(it.status === 'check' || it.source === 'voice') && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '7px' }}>
                             <input
                               type="number" inputMode="decimal" step="any" min="0"
@@ -2719,17 +2838,33 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </button>
               <button
                 onClick={startVoiceInput}
-                disabled={scanning || listening}
-                title={t.voiceInputTitle}
-                aria-label={t.voiceInputTitle}
-                style={{ padding: '13px 18px', backgroundColor: listening ? c.expenseColor : c.card, color: listening ? '#fff' : c.text, border: '1px solid ' + (listening ? c.expenseColor : c.border), borderRadius: '8px', cursor: (scanning || listening) ? 'wait' : 'pointer', fontSize: '18px', opacity: scanning ? 0.7 : 1, animation: listening ? 'pulse 1.2s ease-in-out infinite' : 'none' }}
+                disabled={scanning}
+                title={listening ? t.voiceDone : t.voiceInputTitle}
+                aria-label={listening ? t.voiceDone : t.voiceInputTitle}
+                style={{ padding: '13px 18px', backgroundColor: listening ? c.expenseColor : c.card, color: listening ? '#fff' : c.text, border: '1px solid ' + (listening ? c.expenseColor : c.border), borderRadius: '8px', cursor: scanning ? 'wait' : 'pointer', fontSize: '18px', opacity: scanning ? 0.7 : 1, animation: listening ? 'pulse 1.2s ease-in-out infinite' : 'none' }}
               >
                 {t.voiceInput}
               </button>
             </div>
-            {(listening || (scanning && !fileInputRef.current?.files?.length)) && (
+            {listening && (
+              <div style={{ backgroundColor: c.card, border: '1px solid ' + c.expenseColor + '70', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px' }}>
+                <div style={{ fontSize: '12px', color: c.sec, marginBottom: '8px', lineHeight: '1.45' }}>🎙️ {t.voiceListeningFree}</div>
+                <div style={{ minHeight: '44px', fontSize: '14px', lineHeight: '1.5', color: voiceText ? c.text : c.sec, fontStyle: voiceText ? 'normal' : 'italic', overflowWrap: 'anywhere', marginBottom: '10px' }}>
+                  {voiceText || '…'}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={startVoiceInput}
+                    style={{ flex: 1, padding: '10px', fontSize: '13px', fontWeight: 600, borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer' }}
+                  >✓ {t.voiceDone}</button>
+                  <button onClick={cancelVoiceInput}
+                    style={{ padding: '10px 16px', fontSize: '13px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: c.sec, cursor: 'pointer' }}
+                  >{t.cancel}</button>
+                </div>
+              </div>
+            )}
+            {!listening && scanning && !fileInputRef.current?.files?.length && (
               <div style={{ textAlign: 'center', fontSize: '12px', color: c.sec, marginBottom: '12px' }}>
-                {listening ? '🎙️ ' + t.voiceListening : '⏳ ' + t.voiceProcessing}
+                ⏳ {t.voiceProcessing}
               </div>
             )}
             <div style={{ height: '6px' }}></div>
@@ -2766,7 +2901,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                   )}
                   <div style={{ marginBottom: '12px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.amount}</label>
-                    <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} placeholder="0" style={inputStyle} />
+                    <input type="text" inputMode="decimal" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value.replace(/[^\d.,\s]/g, '') })} placeholder="0" style={inputStyle} />
                   </div>
                   <div style={{ marginBottom: '12px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: c.sec }}>{t.description}</label>
@@ -3754,7 +3889,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                         const amt = parseFloat(recurForm.amount);
                         const day = parseInt(recurForm.day, 10);
                         if (!recurForm.category || !isFinite(amt) || amt <= 0 || !(day >= 1 && day <= 28)) return;
-                        setRecurring([...recurring, { ...recurForm, id: Date.now(), amount: amt, day, lastPosted: null, skipped: null }]);
+                        setRecurring([...recurring, { ...recurForm, id: newId(), amount: amt, day, lastPosted: null, skipped: null }]);
                         setRecurForm(null);
                       }}
                       style={{ flex: 1, padding: '11px', fontSize: '13px', borderRadius: '8px', border: 'none', backgroundColor: c.saveBtn, color: '#fff', cursor: 'pointer', fontWeight: 500 }}
