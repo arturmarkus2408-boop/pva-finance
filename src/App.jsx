@@ -101,6 +101,7 @@ const App = () => {
   const [inboxKey, setInboxKey] = useState('');
   const [tempInboxKey, setTempInboxKey] = useState('');
   const [inboxBusy, setInboxBusy] = useState(false);
+  const [inboxStatus, setInboxStatus] = useState(null); // { ok: bool, text } — ответ под кнопкой в настройках
   const [pendingAckIds, setPendingAckIds] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -1191,23 +1192,25 @@ const App = () => {
   // ===== ПОЧТОВЫЙ ЯЩИК: ЗАБРАТЬ НАКОПЛЕННЫЕ SMS С СЕРВЕРА =====
   // Сервер только передаёт текст. Разбор, сверка с базой и решение, что вносить,
   // как и раньше происходят здесь, на устройстве.
-  const fetchInbox = async (silent) => {
-    if (!inboxKey || inboxBusy) return;
+  const fetchInbox = async (silent, keyOverride) => {
+    const key = keyOverride || inboxKey;
+    if (!key || inboxBusy) return;
     setInboxBusy(true);
+    if (!silent) setInboxStatus(null);
     try {
-      const resp = await fetch('/api/inbox', { headers: { 'x-wallet-key': inboxKey } });
+      const resp = await fetch('/api/inbox', { headers: { 'x-wallet-key': key } });
       if (resp.status === 401) throw new Error('bad-key');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
       const items = Array.isArray(data.items) ? data.items : [];
       if (items.length === 0) {
-        if (!silent) { setScanNotice(t.inboxEmpty); setTimeout(() => setScanNotice(''), 3000); }
+        if (!silent) { setInboxStatus({ ok: true, text: t.inboxEmpty }); setScanNotice(t.inboxEmpty); setTimeout(() => setScanNotice(''), 3000); }
         return;
       }
       const raw = items.flatMap(m => parseBankSms(m.text));
       const normalized = raw.map(x => normalizeScannedItem(x, catsFor)).filter(Boolean);
       if (normalized.length === 0) {
-        if (!silent) { setScanError(t.inboxNoParse); setTimeout(() => setScanError(''), 6000); }
+        if (!silent) { setInboxStatus({ ok: false, text: t.inboxNoParse }); setScanError(t.inboxNoParse); setTimeout(() => setScanError(''), 6000); }
         return;
       }
       setPendingAckIds(items.map(m => m.id));
@@ -1215,6 +1218,7 @@ const App = () => {
       setActiveTab('dashboard');
     } catch (err) {
       if (!silent) {
+        setInboxStatus({ ok: false, text: err?.message === 'bad-key' ? t.inboxBadKey : t.inboxFail });
         setScanError(err?.message === 'bad-key' ? t.inboxBadKey : t.inboxFail);
         setTimeout(() => setScanError(''), 6000);
       }
@@ -2368,12 +2372,23 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 autoComplete="off" spellCheck="false"
               />
               <button
-                onClick={() => fetchInbox(false)}
-                disabled={!inboxKey || inboxBusy}
-                style={{ width: '100%', padding: '10px', fontSize: '12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: inboxKey ? c.saveBtn : c.sec, cursor: (inboxKey && !inboxBusy) ? 'pointer' : 'default', marginBottom: '8px' }}
+                onClick={() => {
+                  // Пароль сохраняется сразу при проверке — отдельно искать кнопку «Сохранить» не нужно
+                  const k = tempInboxKey.trim();
+                  if (!k) return;
+                  if (k !== inboxKey) { setInboxKey(k); localStorage.setItem('walletInboxKey', k); }
+                  fetchInbox(false, k);
+                }}
+                disabled={!tempInboxKey.trim() || inboxBusy}
+                style={{ width: '100%', padding: '10px', fontSize: '12px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: 'transparent', color: tempInboxKey.trim() ? c.saveBtn : c.sec, cursor: (tempInboxKey.trim() && !inboxBusy) ? 'pointer' : 'default', marginBottom: '8px' }}
               >
                 {inboxBusy ? t.inboxChecking : '↻ ' + t.inboxCheck}
               </button>
+              {inboxStatus && (
+                <div role="status" style={{ fontSize: '12px', fontWeight: 500, color: inboxStatus.ok ? c.saveBtn : c.expenseColor, marginBottom: '8px', textAlign: 'center' }}>
+                  {inboxStatus.ok ? '✓ ' : '✕ '}{inboxStatus.text}
+                </div>
+              )}
               <div style={{ fontSize: '11px', color: c.sec, marginBottom: '4px', lineHeight: '1.5' }}>{t.inboxPrivacy}</div>
             </div>
 
