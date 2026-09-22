@@ -5,6 +5,7 @@ import './App.css';
 import { tr as translations } from './i18n';
 import { todayLocal, toIsoDate, newId, parseAmount, normalizeCurrencyName } from './lib/date';
 import { guessCategory } from './lib/categoryGuess';
+import { learnRule, ruleCategory, propagateCategoryEdit, reassignOrphans } from './lib/categoryMemory';
 import { buildReportPdf, preloadPdfTools } from './lib/pdfReport';
 import { parseBankSms } from './lib/smsParser';
 import { isSameTx } from './lib/matching';
@@ -62,6 +63,10 @@ const App = () => {
   const voiceInterimRef = useRef('');
   const voiceCancelledRef = useRef(false);
   const [customCats, setCustomCats] = useState({ income: null, expense: null });
+  // Выученные исправления категорий: { expense: { 'ATTO TOLOV': 'Транспорт' }, income: {...} }
+  const [catRules, setCatRules] = useState({});
+  // Последнее автоматическое исправление — чтобы его можно было отменить одной кнопкой
+  const [autoFix, setAutoFix] = useState(null); // { text, prevTransactions, prevRules }
   const [newCatName, setNewCatName] = useState({ income: '', expense: '' });
   const [ownerName, setOwnerName] = useState('');
   const [myCards, setMyCards] = useState([]);
@@ -149,6 +154,22 @@ const App = () => {
         if (Array.isArray(data.tags)) setTags(data.tags);
         if (typeof data.lastBackup === 'string') setLastBackup(data.lastBackup);
         if (data.reconAnchors && typeof data.reconAnchors === 'object') setReconAnchors(data.reconAnchors);
+        const rules = (data.catRules && typeof data.catRules === 'object') ? data.catRules : {};
+        setCatRules(rules);
+        // Разовое исправление после обновления: операции с категорией, которой больше нет
+        // в списке (например, удалённая «Бухгалтерия …»), разносятся по подходящим категориям.
+        if (!localStorage.getItem('walletMigrOrphanCats1') && Array.isArray(data.transactions)) {
+          localStorage.setItem('walletMigrOrphanCats1', '1');
+          const tr = translations[data.language || 'ru'] || translations.ru;
+          const own = data.customCats || {};
+          const listFor = (type) => (type === 'income' ? own.income : own.expense) || (type === 'income' ? tr.categoriesInc : tr.categoriesExp);
+          const pick = (tx, list) => ruleCategory(rules, tx.type, tx.description, list) || guessCategory(tx.description, list) || tr.otherCategory;
+          const { next, changed } = reassignOrphans(data.transactions, listFor, pick);
+          if (changed > 0) {
+            setTransactions(next);
+            setAutoFix({ text: tr.autoFixOrphans.replace('{n}', changed), prevTransactions: data.transactions, prevRules: rules, applied: next });
+          }
+        }
       } catch (e) {}
     }
     const key = localStorage.getItem('walletGeminiKey');
@@ -182,12 +203,12 @@ const App = () => {
       return;
     }
     try {
-      localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors }));
+      localStorage.setItem('walletData', JSON.stringify({ transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors, catRules }));
     } catch {
       // Раньше ошибка здесь роняла всё приложение в белый экран, а данные молча не сохранялись
       setTimeout(() => setScanError(translations[language].storageFull), 0);
     }
-  }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors]);
+  }, [transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, lastBackup, reconAnchors, catRules]);
 
   // Автосворачивание раскрытых прошлых месяцев и годов при любом действии вне списка
   useEffect(() => {
@@ -229,8 +250,37 @@ const App = () => {
     return true;
   };
 
+  // Подбор категории для операции: сначала выученные исправления пользователя,
+  // потом получатель по ключевым словам, иначе «Другое»
+  const pickCategory = (tx, list) =>
+    ruleCategory(catRules, tx.type, tx.description, list) || guessCategory(tx.description, list) || t.otherCategory;
+
+  // Удаление категории: её операции не остаются «висеть» со старым названием,
+  // а сами разносятся по подходящим категориям. Отменить можно одной кнопкой.
   const removeCategory = (type, name) => {
+    const count = transactions.filter(tx => tx.type === type && tx.category === name).length;
+    const msg = count > 0 ? t.catDeleteMove.replace('{name}', name).replace('{n}', count) : t.catDeleteConfirm;
+    if (!window.confirm(msg)) return;
+    const remaining = catsFor(type).filter(x => x !== name);
     setCustomCats(prev => ({ ...prev, [type]: baseList(prev, type).filter(x => x !== name) }));
+    if (count > 0) {
+      const prevTransactions = transactions;
+      const listFor = (tp) => tp === type ? remaining : catsFor(tp);
+      const { next, changed } = reassignOrphans(
+        transactions.map(tx => (tx.type === type && tx.category === name) ? { ...tx, catLocked: false } : tx),
+        listFor, pickCategory, name);
+      setTransactions(next);
+      setAutoFix({ text: t.autoFixOrphans.replace('{n}', changed), prevTransactions, prevRules: catRules, restoreCat: { type, name }, applied: next });
+    }
+  };
+
+  // Отмена последнего автоматического исправления
+  const undoAutoFix = () => {
+    if (!autoFix) return;
+    setTransactions(autoFix.prevTransactions);
+    setCatRules(autoFix.prevRules || {});
+    if (autoFix.restoreCat) addCategory(autoFix.restoreCat.type, autoFix.restoreCat.name);
+    setAutoFix(null);
   };
 
   // Переименование правит и уже внесённые операции, чтобы отчёты не распались на два имени
@@ -251,11 +301,28 @@ const App = () => {
     if (!(parseAmount(formData.amount) > 0) || !finalCategory) return;
     if (isNewCat) addCategory(formType, finalCategory);
     if (editingId) {
-      setTransactions(transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseAmount(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date } : tx));
+      const before = transactions.find(tx => tx.id === editingId);
+      const edited = transactions.map(tx => tx.id === editingId ? { ...tx, amount: parseAmount(formData.amount), category: finalCategory, description: formData.description, tag: formData.tag, date: formData.date, catLocked: true } : tx);
+      // Категорию поменяли — запоминаем и исправляем такие же операции этого получателя,
+      // у которых стояла та же старая категория. Остальные не трогаем.
+      if (before && before.category !== finalCategory) {
+        const { next, changed } = propagateCategoryEdit(edited, editingId, before.category, finalCategory);
+        const nextRules = learnRule(catRules, before.type, formData.description || before.description, finalCategory);
+        setTransactions(next);
+        setCatRules(nextRules);
+        if (changed > 0) {
+          setAutoFix({
+            text: t.autoFixEdit.replace('{n}', changed).replace('{from}', before.category).replace('{to}', finalCategory),
+            prevTransactions: transactions, prevRules: catRules, applied: next
+          });
+        }
+      } else {
+        setTransactions(edited);
+      }
       setEditingId(null);
     } else {
       const amountNum = parseAmount(formData.amount);
-      setTransactions([...transactions, { id: newId(), type: formType, amount: amountNum, category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date }]);
+      setTransactions([...transactions, { id: newId(), type: formType, amount: amountNum, category: finalCategory, description: formData.description, tag: formData.tag, currency, date: formData.date, catLocked: true }]);
       // Эта трата перевалила за месячный лимит? Предупреждаем сразу, а не когда пользователь сам заметит
       if (formType === 'expense') {
         const lim = parseFloat(budgets[currency + '|' + finalCategory]);
@@ -862,7 +929,7 @@ const App = () => {
   const exportBackup = () => {
     const payload = {
       app: 'wallet', version: 1, savedAt: new Date().toISOString(),
-      data: { transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, reconAnchors, chat: chatMessages.slice(-40) }
+      data: { transactions, theme, language, currency, currencies, dashboardPeriod, customCats, ownerName, myCards, plans, rates, baseCurrency, budgets, recurring, tags, reconAnchors, catRules, chat: chatMessages.slice(-40) }
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -903,6 +970,7 @@ const App = () => {
       if (Array.isArray(d.recurring)) setRecurring(d.recurring);
       if (Array.isArray(d.tags)) setTags(d.tags);
       if (d.reconAnchors) setReconAnchors(d.reconAnchors);
+      setCatRules(d.catRules && typeof d.catRules === 'object' ? d.catRules : {});
       if (Array.isArray(d.chat)) {
         setChatMessages(d.chat);
         try { localStorage.setItem('walletChat', JSON.stringify(d.chat)); } catch { /* память переполнена — не критично */ }
@@ -1154,7 +1222,8 @@ const App = () => {
     // категории вроде «Бухгалтерия …», которые пользователь просто добавил последними.
     const category = (typeof raw?.category === 'string' && raw.category.trim())
       ? raw.category.trim()
-      : (guessCategory([raw?.description, raw?.counterparty].filter(Boolean).join(' '), catList)
+      : (ruleCategory(catRules, type, raw?.description, catList)
+        || guessCategory([raw?.description, raw?.counterparty].filter(Boolean).join(' '), catList)
         || t.otherCategory);
     const feeRaw = num(raw?.fee);
     const fee = (feeRaw && feeRaw > 0 && type === 'expense') ? feeRaw : 0;
@@ -1547,9 +1616,13 @@ const App = () => {
         balanceAfter: i.balanceAfter ?? null,
         originalAmount: i.originalAmount ?? null,
         originalCurrency: i.originalCurrency || null,
-        source: i.source || 'import'
+        source: i.source || 'import',
+        catLocked: !!i.catTouched   // категорию выбрал сам пользователь в окне сверки
       };
     });
+    // Исправления категорий в окне сверки тоже запоминаются для следующих SMS
+    const touched = chosen.filter(i => i.catTouched && i.description);
+    if (touched.length) setCatRules(touched.reduce((r, i) => learnRule(r, i.type, i.description, i.category), catRules));
     const unknownCurrencies = [...new Set(newTx.map(x => x.currency))].filter(cur => !currencies.includes(cur));
     if (unknownCurrencies.length) setCurrencies([...currencies, ...unknownCurrencies]);
     // Новые категории из квитанций запоминаем, чтобы они были под рукой при ручном вводе
@@ -2384,7 +2457,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                           title={t.catRenameTitle}
                         >{cat}</span>
                         <button
-                          onClick={() => { if (window.confirm(t.catDeleteConfirm)) removeCategory(kind, cat); }}
+                          onClick={() => removeCategory(kind, cat)}
                           style={{ background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '13px', padding: 0, lineHeight: 1 }}
                         >✕</button>
                       </span>
@@ -2680,7 +2753,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                           </select>
                           <select
                             value={it.category}
-                            onChange={(e) => updateImportItem(idx, { category: e.target.value })}
+                            onChange={(e) => updateImportItem(idx, { category: e.target.value, catTouched: true })}
                             style={{ padding: '4px 6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, backgroundColor: c.bg, color: c.text, cursor: 'pointer', maxWidth: '150px' }}
                           >
                             {catOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -2953,6 +3026,18 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 {scanError}
               </div>
             )}
+            {/* Кнопка «Отменить» видна, только пока после исправления ничего не менялось —
+                иначе отмена откатила бы и более поздние правки */}
+            {autoFix && autoFix.applied === transactions && (
+              <div role="status" style={{ backgroundColor: c.card, border: '1px solid ' + c.saveBtn, borderRadius: '10px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: c.text, display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ lineHeight: 1.45 }}>✓ {autoFix.text}</span>
+                <span style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button onClick={undoAutoFix} style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid ' + c.saveBtn, background: 'none', color: c.saveBtn, cursor: 'pointer', fontWeight: 500 }}>{t.autoFixUndo}</button>
+                  <button onClick={() => setAutoFix(null)} aria-label="OK" style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: 'none', background: 'none', color: c.sec, cursor: 'pointer' }}>✕</button>
+                </span>
+              </div>
+            )}
+
             {scanNotice && (
               <div style={{ backgroundColor: c.incomeColor, color: '#fff', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>
                 ✓ {scanNotice}
