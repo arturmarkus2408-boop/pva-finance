@@ -27,7 +27,7 @@ export const parseBankSms = (text) => {
   // Как резать текст на отдельные сообщения.
   // Kapitalbank начинает каждое SMS с «Karta *1515. Xarid/Pokupka ...» — режем по этому началу.
   // У Hamkorbank и похожих карта стоит в середине, а начало — слово операции («Spisanie», «Pokupka»).
-  const cardFirst = /(?=(?:karta|карта|card)\s*\*+\s*\d{4}\s*\.\s*[A-Za-zА-Яа-яЁёʻʼ'’]+[/\s:])/gi;
+  const cardFirst = /(?=(?:karta|карта|card)\s*\*+\s*\d{4}\s*\.\s*(?!summa|сумма|balans|баланс|dostupno|доступно)[A-Za-zА-Яа-яЁёʻʼ'’]+[/\s:])/gi;
   const wordFirst = /(?=(?:spisanie|списание|pokupka|покупка|platezh|платеж|платёж|oplata|оплата|snyatie|снятие|popolnenie|пополнение|zachislenie|зачисление|postuplenie|поступление|vozvrat|возврат|perevod|перевод)\b)/gi;
   const hasAmount = (x) => /summa|сумма|[+-]\s?\d[\d\s]*(?:[.,]\d{1,2})?\s*,?\s*[A-Z]{3}\b/i.test(x)
     || /(?<![\d:.,])\d[\d\s]*[.,]\d{2}\s*[A-Z]{3}\b/.test(x);
@@ -132,6 +132,11 @@ export const parseBankSms = (text) => {
         // Получателя нет — берём начало SMS: «Perevod na kartu»
         desc = body.slice(0, amountIndex).replace(/[*x•]+\s*\d{4}/, '').replace(/[,.:\s]+$/, '').trim();
       }
+    }
+    // «ANGLESEY FOOD, TASHKENT, CHILANZARSKIY RAYON ...» — после первой запятой идёт адрес
+    if (!quoted && desc.includes(',')) {
+      const head = desc.split(',')[0].trim();
+      if (head.length >= 3) desc = head;
     }
     if (desc.length > 60) desc = desc.slice(0, 60);
 

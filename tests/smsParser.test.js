@@ -68,3 +68,18 @@ test('секунды времени и код страны не принимаю
   const r = parseBankSms('Pokupka 1 700.00 UZS, po karte *2073, 2026-09-21 13:22:34, UZB, OOO ATTO TOLOV Komissiya: 0.00 UZS. Dostupno: 18 842.39 UZS');
   assert.equal(r[0].amount, 1700);
 });
+
+// Живые SMS с номера 5800 (карта *7647)
+const SMS_5800 = `Pokupka: OOO ATTO TOLOV, M ULUGBEK, GP M ULUGBEK UL M ULUGBEK DOM 1 22.09.26 13:39 karta ***7647. summa:1700.00 UZS, balans:41337.00 UZS
+Pokupka: ANGLESEY FOOD, TASHKENT, CHILANZARSKIY RAYON UL TURAB TU 22.09.26 18:04 karta ***7647. summa:19683.00 UZS, balans:21654.00 UZS`;
+
+test('номер 5800: дата, получатель и карта не теряются', () => {
+  const r = parseBankSms(SMS_5800);
+  assert.equal(r.length, 2);
+  assert.deepEqual(r.map(x => x.amount), [1700, 19683]);
+  assert.deepEqual(r.map(x => x.date), ['2026-09-22', '2026-09-22']);
+  assert.deepEqual(r.map(x => x.time), ['13:39', '18:04']);
+  assert.deepEqual(r.map(x => x.card), ['7647', '7647']);
+  assert.deepEqual(r.map(x => x.description), ['OOO ATTO TOLOV', 'ANGLESEY FOOD']);
+  assert.deepEqual(r.map(x => x.balanceAfter), [41337, 21654]);
+});

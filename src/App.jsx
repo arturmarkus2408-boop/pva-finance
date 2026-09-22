@@ -4,6 +4,8 @@ import * as XLSX from 'xlsx';
 import './App.css';
 import { tr as translations } from './i18n';
 import { todayLocal, toIsoDate, newId, parseAmount, normalizeCurrencyName } from './lib/date';
+import { guessCategory } from './lib/categoryGuess';
+import { buildReportPdf, preloadPdfTools } from './lib/pdfReport';
 import { parseBankSms } from './lib/smsParser';
 import { isSameTx } from './lib/matching';
 import { computeReconciliation } from './lib/reconciliation';
@@ -43,6 +45,7 @@ const App = () => {
   const [scanNotice, setScanNotice] = useState('');
   const [listening, setListening] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
+  const [pendingPdf, setPendingPdf] = useState(null); // готовый PDF, если меню не успело открыться
   const [expandedMonths, setExpandedMonths] = useState(new Set());
   const [expandedYears, setExpandedYears] = useState(new Set());
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -108,6 +111,16 @@ const App = () => {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatUseFinData, setChatUseFinData] = useState(false);
   const chatEndRef = useRef(null);
+  // Форма операции стоит вверху главного экрана. При «Редактировать» из списка внизу
+  // её не было видно, и казалось, что кнопка не работает — теперь экран прокручивается к ней.
+  const txFormRef = useRef(null);
+  useEffect(() => {
+    if (!showForm) return;
+    const id = setTimeout(() => {
+      if (txFormRef.current) txFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+    return () => clearTimeout(id);
+  }, [showForm, editingId]);
   const isFirstRender = useRef(true);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -560,6 +573,20 @@ const App = () => {
     if (periodToStr && tx.date > periodToStr) return false;
     return true;
   });
+
+  // Операции за тот же период в ДРУГИХ валютах. Главный экран считает только выбранную
+  // валюту, и доллары с карты *1515 просто не было видно. Теперь они показываются строкой ниже.
+  const otherCurrencyTotals = (() => {
+    const map = {};
+    transactions.forEach(tx => {
+      if (tx.currency === currency) return;
+      if (periodFromStr && tx.date < periodFromStr) return;
+      if (periodToStr && tx.date > periodToStr) return;
+      const m = map[tx.currency] || (map[tx.currency] = { cur: tx.currency, income: 0, expense: 0 });
+      if (tx.type === 'income') m.income += tx.amount; else m.expense += tx.amount;
+    });
+    return Object.values(map).sort((a, b) => (b.expense + b.income) - (a.expense + a.income));
+  })();
 
   const income = periodTransactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const expense = periodTransactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
@@ -1122,9 +1149,13 @@ const App = () => {
     const knownCur = rawCur ? currencies.find(cur => cur.toLowerCase() === rawCur.toLowerCase()) : null;
     const currencyVal = knownCur || (/^[A-Za-z]{3}$/.test(rawCur) ? rawCur.toUpperCase() : currency);
     const catList = fallbackCats(type);
+    // Категория: от распознавания (AI), иначе подбор по получателю, иначе «Другое» из списка
+    // пользователя. Последняя по порядку категория больше не подставляется: туда попадали
+    // категории вроде «Бухгалтерия …», которые пользователь просто добавил последними.
     const category = (typeof raw?.category === 'string' && raw.category.trim())
       ? raw.category.trim()
-      : catList[catList.length - 1];
+      : (guessCategory([raw?.description, raw?.counterparty].filter(Boolean).join(' '), catList)
+        || t.otherCategory);
     const feeRaw = num(raw?.fee);
     const fee = (feeRaw && feeRaw > 0 && type === 'expense') ? feeRaw : 0;
     const ref = raw?.ref ? String(raw.ref).trim().slice(0, 60) : null;
@@ -2066,65 +2097,81 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
     XLSX.writeFile(wb, 'wallet-report.xlsx');
   };
 
-  // ===== ПОДЕЛИТЬСЯ ОТЧЁТОМ ЧЕРЕЗ WEB SHARE API =====
-  const shareReport = async () => {
-    setShareNotice('');
-    // Сгенерировать Excel в памяти
-    const rows = reportData.map(tx => ({
-      [t.date]: tx.date,
-      [t.typeLabel]: tx.type === 'income' ? t.income : t.expense,
-      [t.category]: tx.category,
-      [t.description]: tx.description || '',
-      [t.amount]: tx.amount,
-      [t.currencyCol]: tx.currency,
-      [t.importCard]: tx.card ? '***' + tx.card : ''
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Wallet');
-    const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-    const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const dateStr = todayLocal();
-    const filename = 'wallet-report-' + dateStr + '.xlsx';
-    const file = new File([blob], filename, { type: blob.type });
-
-    // Fallback — скачать файл + показать инструкцию
-    const downloadWithHelp = () => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setShareNotice(t.shareNotSupported);
-      setTimeout(() => setShareNotice(''), 15000);
-    };
-
-    // Пробуем через Web Share API
-    if (navigator.share) {
-      try {
-        if (navigator.canShare && !navigator.canShare({ files: [file] })) {
-          downloadWithHelp();
-          return;
-        }
-        await navigator.share({
-          files: [file],
-          title: t.shareTitle,
-          text: t.shareText
-        });
-        return;
-      } catch (err) {
-        if (err && err.name === 'AbortError') return; // пользователь отменил
-        console.warn('Share API failed, downloading instead:', err);
-        downloadWithHelp();
-        return;
-      }
+  // ===== ПОДЕЛИТЬСЯ ОТЧЁТОМ: НАСТОЯЩИЙ PDF ЧЕРЕЗ МЕНЮ «ПОДЕЛИТЬСЯ» =====
+  // Раньше отправлялся Excel, а Android не разрешает сайтам делиться таким файлом —
+  // он молча падал в «Загрузки». PDF разрешён: откроется меню, в нём Telegram.
+  const sendPdfFile = async (file) => {
+    try {
+      await navigator.share({ files: [file], title: t.shareTitle });
+      setPendingPdf(null);
+      setShareNotice('');
+    } catch (err) {
+      if (err && err.name === 'AbortError') { setPendingPdf(null); setShareNotice(''); return; }
+      // Телефон отменил показ меню, потому что PDF собирался слишком долго:
+      // файл готов, повторное нажатие откроет меню сразу
+      setPendingPdf(file);
+      setShareNotice(t.sharePdfReady);
     }
-    // Web Share вообще не поддерживается
-    downloadWithHelp();
   };
+
+  const shareReport = async () => {
+    setPendingPdf(null);
+    setShareNotice(t.sharePdfBuilding);
+    let blob;
+    try {
+      const balanceNow = reportIncome - reportExpense;
+      const fmt = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      const range = [filterFrom && (t.dateFrom + ': ' + filterFrom), filterTo && (t.dateTo + ': ' + filterTo)].filter(Boolean).join('   ');
+      blob = await buildReportPdf({
+        title: 'Wallet — ' + t.reportTitle,
+        subtitle: [range, currency].filter(Boolean).join('  ·  '),
+        kpis: [
+          { label: t.totalIncome, value: fmt(reportIncome) + ' ' + currency, tone: 'income' },
+          { label: t.totalExpense, value: fmt(reportExpense) + ' ' + currency, tone: 'expense' },
+          { label: t.totalBalance, value: fmt(balanceNow) + ' ' + currency },
+          { label: t.operations, value: String(reportData.length) }
+        ],
+        head: [t.date, t.category, t.description, t.importCard.charAt(0).toUpperCase() + t.importCard.slice(1), t.amount],
+        rows: reportData.map(tx => [
+          tx.date,
+          tx.category || '',
+          tx.description || '',
+          tx.card ? '***' + tx.card : '',
+          (tx.type === 'income' ? '+' : '−') + fmt(tx.amount) + ' ' + tx.currency
+        ]),
+        rowTones: reportData.map(tx => tx.type),
+        footer: 'Wallet · ' + todayLocal()
+      });
+    } catch (err) {
+      console.warn('PDF build failed:', err);
+      setShareNotice(t.sharePdfFail);
+      setTimeout(() => setShareNotice(''), 6000);
+      return;
+    }
+    const filename = 'wallet-report-' + todayLocal() + '.pdf';
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      await sendPdfFile(file);
+      return;
+    }
+    // Меню «Поделиться» недоступно (например, на компьютере) — просто сохраняем PDF
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setShareNotice(t.shareNotSupported);
+    setTimeout(() => setShareNotice(''), 15000);
+  };
+
+  // Шрифт и библиотеки PDF подгружаем заранее, как только открыта вкладка «Отчёт»
+  useEffect(() => {
+    if (activeTab === 'report') preloadPdfTools().catch(() => {});
+  }, [activeTab]);
 
   // ===== ЭКСПОРТ PDF ЧЕРЕЗ ПЕЧАТЬ БРАУЗЕРА (кириллица работает всегда) =====
   const exportPDF = () => {
@@ -2827,6 +2874,23 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               )}
             </div>
 
+            {otherCurrencyTotals.length > 0 && (
+              <div style={{ backgroundColor: c.card, border: '1px solid ' + c.border, borderRadius: '10px', padding: '10px 14px', marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', color: c.sec, marginBottom: '6px' }}>{t.otherCurrenciesTitle}</div>
+                {otherCurrencyTotals.map(o => (
+                  <button key={o.cur} onClick={() => setCurrency(o.cur)} title={t.otherCurrenciesSwitch}
+                    style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '6px 0', background: 'none', border: 'none', borderTop: '1px dashed ' + c.border, cursor: 'pointer', fontSize: '13px', color: c.text }}>
+                    <span style={{ fontWeight: 600 }}>{o.cur}</span>
+                    <span style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {o.expense > 0 && <span style={{ color: c.expenseColor, fontWeight: 500 }}>−{o.expense.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>}
+                      {o.income > 0 && <span style={{ color: c.incomeColor, fontWeight: 500 }}>+{o.income.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>}
+                      <span style={{ color: c.sec }}>›</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <button onClick={() => { setFormType('income'); setEditingId(null); setShowForm(true); }} style={{ flex: 1, padding: '13px', backgroundColor: c.incomeColor, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>{t.addIncome}</button>
               <button onClick={() => { setFormType('expense'); setEditingId(null); setShowForm(true); }} style={{ flex: 1, padding: '13px', backgroundColor: c.expenseColor, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>{t.addExpense}</button>
@@ -2896,7 +2960,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
             )}
 
             {showForm && (
-              <div style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', marginBottom: '16px', border: '1px solid ' + c.border }}>
+              <div ref={txFormRef} style={{ backgroundColor: c.card, padding: '18px', borderRadius: '12px', marginBottom: '16px', border: '1px solid ' + c.border, scrollMarginTop: '12px' }}>
                 {editingId && <div style={{ marginBottom: '10px', fontSize: '13px', color: c.saveBtn, fontWeight: 500 }}>{t.editMode}</div>}
                 <form onSubmit={submitTransaction}>
                   <div style={{ marginBottom: '12px' }}>
@@ -3598,7 +3662,10 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               {shareNotice && (
                 <div style={{ marginTop: '10px', padding: '12px 14px', backgroundColor: c.card, color: c.text, borderRadius: '8px', fontSize: '12px', lineHeight: '1.55', border: '1px solid ' + c.incomeColor, position: 'relative' }}>
                   <div style={{ paddingRight: '20px' }}>{shareNotice}</div>
-                  <button onClick={() => setShareNotice('')} aria-label="Закрыть" style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '16px', padding: 0, lineHeight: 1 }}>✕</button>
+                  {pendingPdf && (
+                    <button onClick={() => sendPdfFile(pendingPdf)} style={{ marginTop: '10px', width: '100%', padding: '10px', backgroundColor: '#2C5282', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}>{t.sharePdfBtn}</button>
+                  )}
+                  <button onClick={() => { setShareNotice(''); setPendingPdf(null); }} aria-label="Закрыть" style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: c.sec, cursor: 'pointer', fontSize: '16px', padding: 0, lineHeight: 1 }}>✕</button>
                 </div>
               )}
             </div>
