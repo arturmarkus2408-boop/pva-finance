@@ -25,6 +25,8 @@ const App = () => {
   const [editingId, setEditingId] = useState(null);
   const [chartType, setChartType] = useState('pie');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [tabHistory, setTabHistory] = useState([]);   // куда возвращает кнопка «Назад»
+  const [openDetails, setOpenDetails] = useState([]); // id операций с раскрытыми деталями
   const [dashboardPeriod, setDashboardPeriod] = useState('month');
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
@@ -131,6 +133,71 @@ const App = () => {
   const galleryInputRef = useRef(null);
 
   const t = translations[language];
+
+  // Переход между разделами с запоминанием, откуда пришли
+  const openTab = (tab) => {
+    if (tab === activeTab) return;
+    setTabHistory(h => [...h.slice(-9), activeTab]);
+    setActiveTab(tab);
+  };
+
+  // «Назад»: закрывает настройки и форму, иначе возвращает в предыдущий раздел
+  const goBack = () => {
+    if (showSettings) { setShowSettings(false); return; }
+    if (showForm) { setShowForm(false); setEditingId(null); return; }
+    if (showPlanForm) { setShowPlanForm(false); setEditingPlanId(null); return; }
+    if (tabHistory.length > 0) {
+      setActiveTab(tabHistory[tabHistory.length - 1]);
+      setTabHistory(h => h.slice(0, -1));
+      return;
+    }
+    setActiveTab('dashboard');
+  };
+  const canGoBack = showSettings || showForm || showPlanForm || activeTab !== 'dashboard';
+
+  // Аппаратная кнопка «назад» на телефоне: раньше она закрывала приложение,
+  // теперь работает так же, как кнопка «Назад» на экране
+  const backRef = useRef(null);
+  useEffect(() => { backRef.current = { canGoBack, goBack }; });
+  useEffect(() => {
+    const onPop = () => {
+      const st = backRef.current;
+      if (st && st.canGoBack) st.goBack();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  useEffect(() => {
+    // Метка в истории браузера ставится только при уходе с главной, чтобы с главной
+    // «назад» по-прежнему закрывала приложение с первого нажатия
+    if (canGoBack && !(window.history.state && window.history.state.wallet)) {
+      window.history.pushState({ wallet: true }, '');
+    }
+  }, [canGoBack]);
+
+  // Что показывать в деталях операции — только заполненные поля
+  const txDetailRows = (tx) => {
+    const num = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    const rows = [
+      [t.date, tx.time ? tx.date + ' ' + tx.time : tx.date],
+      [t.detType, tx.type === 'income' ? t.income : t.expense],
+      [t.category, tx.category || '—'],
+      [t.amount, (tx.type === 'income' ? '+' : '−') + num(tx.amount) + ' ' + tx.currency]
+    ];
+    if (tx.fee > 0) rows.push([t.importFee, num(tx.fee) + ' ' + tx.currency]);
+    if (tx.baseAmount != null && tx.baseAmount !== tx.amount) rows.push([t.detBase, num(tx.baseAmount) + ' ' + tx.currency]);
+    if (tx.originalAmount != null) rows.push([t.detOriginal, num(tx.originalAmount) + ' ' + (tx.originalCurrency || '')]);
+    if (tx.description) rows.push([t.description, tx.description]);
+    if (tx.card) rows.push([t.detCard, '***' + tx.card]);
+    if (tx.counterCard) rows.push([t.detCounterCard, '***' + tx.counterCard]);
+    if (tx.balanceAfter != null) rows.push([t.detBalance, num(tx.balanceAfter) + ' ' + tx.currency]);
+    if (tx.ref) rows.push([t.detRef, tx.ref]);
+    if (tx.tag) rows.push([t.detTag, tx.tag]);
+    rows.push([t.detSource, tx.source === 'sms' ? t.detSourceSms : tx.source === 'import' ? t.detSourceImport : tx.source ? tx.source : t.detSourceManual]);
+    return rows.map(([label, value]) => ({ label, value }));
+  };
+
+  const toggleDetails = (id) => setOpenDetails(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   useEffect(() => {
     const saved = localStorage.getItem('walletData') || localStorage.getItem('pvaData');
@@ -2608,10 +2675,16 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
           </div>
         )}
 
+        {canGoBack && (
+          <button onClick={goBack} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', marginBottom: '10px', fontSize: '13px', borderRadius: '8px', border: '1px solid ' + c.border, backgroundColor: c.card, color: c.text, cursor: 'pointer', fontWeight: 500 }}>
+            ← {t.back}
+          </button>
+        )}
+
         <div style={{ display: 'flex', gap: '4px', backgroundColor: c.card, padding: '4px', borderRadius: '12px', border: '1px solid ' + c.border, marginBottom: '16px' }}>
-          <button onClick={() => setActiveTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
-          <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
-          <button onClick={() => setActiveTab('plans')} style={{ ...tabStyle(activeTab === 'plans'), position: 'relative' }}>
+          <button onClick={() => openTab('dashboard')} style={tabStyle(activeTab === 'dashboard')}>{t.dashboard}</button>
+          <button onClick={() => openTab('report')} style={tabStyle(activeTab === 'report')}>{t.report}</button>
+          <button onClick={() => openTab('plans')} style={{ ...tabStyle(activeTab === 'plans'), position: 'relative' }}>
             {t.plans}
             {(overdueCount + recurringDue.length + budgetRows.filter(b => b.left < 0).length) > 0 && activeTab !== 'plans' && (
               <span style={{ position: 'absolute', top: '5px', right: '7px', minWidth: '16px', height: '16px', borderRadius: '8px', backgroundColor: c.expenseColor, color: '#fff', fontSize: '10px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
@@ -2619,7 +2692,7 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
               </span>
             )}
           </button>
-          <button onClick={() => setActiveTab('assistant')} style={tabStyle(activeTab === 'assistant')}>{t.assistant}</button>
+          <button onClick={() => openTab('assistant')} style={tabStyle(activeTab === 'assistant')}>{t.assistant}</button>
         </div>
 
         {importItems && (
@@ -3597,23 +3670,46 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                         {isExpanded && (alwaysExpanded && !recentShowAll ? monthTxs.slice(0, 7) : monthTxs).map((tx, i, shown) => {
                           const amountColor = tx.type === 'income' ? c.incomeColor : getExpenseColor(tx);
                           return (
-                            <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < shown.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                                <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
-                                  {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
+                            <div key={tx.id} style={{ padding: '10px 0', borderBottom: i < shown.length - 1 ? '1px solid ' + c.border : 'none' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
+                                  <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
                                 </div>
-                                {tx.originalAmount != null && (
-                                  <div style={{ fontSize: '10px', color: c.sec }}>{tx.originalAmount.toLocaleString()} {tx.originalCurrency}</div>
-                                )}
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '3px', justifyContent: 'flex-end' }}>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ color: amountColor, fontWeight: 600, fontSize: '14px' }}>
+                                    {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
+                                  </div>
+                                  {tx.originalAmount != null && (
+                                    <div style={{ fontSize: '10px', color: c.sec }}>{tx.originalAmount.toLocaleString()} {tx.originalCurrency}</div>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Детали раскрываются прямо здесь: никуда не переносим и ничего не закрываем */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleDetails(tx.id); }}
+                                  aria-expanded={openDetails.includes(tx.id)}
+                                  style={{ fontSize: '11px', background: 'none', border: 'none', color: c.sec, cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                                >
+                                  {openDetails.includes(tx.id) ? '▲ ' + t.detailsHide : '▼ ' + t.detailsShow}
+                                </button>
+                                <div style={{ display: 'flex', gap: '8px' }}>
                                   <button onClick={(e) => { e.stopPropagation(); startEdit(tx); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: c.saveBtn, cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.edit}</button>
                                   <button onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} style={{ fontSize: '11px', background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', padding: 0, fontWeight: 500 }}>{t.delete}</button>
                                 </div>
                               </div>
+                              {openDetails.includes(tx.id) && (
+                                <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: c.bg, border: '1px solid ' + c.border, borderRadius: '8px', fontSize: '11px', lineHeight: 1.6 }}>
+                                  {txDetailRows(tx).map(row => (
+                                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                                      <span style={{ color: c.sec, flexShrink: 0 }}>{row.label}</span>
+                                      <span style={{ textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
+                                    </div>
+                                  ))}
+                                  <button onClick={(e) => { e.stopPropagation(); toggleDetails(tx.id); }} style={{ marginTop: '8px', width: '100%', padding: '6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, background: 'none', color: c.sec, cursor: 'pointer' }}>{t.detailsHide}</button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -3780,14 +3876,34 @@ ${monthsData.join('\n') || '(нет исторических данных)'}
                 <div style={{ color: c.sec, textAlign: 'center', padding: '20px' }}>{t.noData}</div>
               ) : (
                 reportData.slice().reverse().map((tx, i) => (
-                  <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < reportData.length - 1 ? '1px solid ' + c.border : 'none', gap: '10px' }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
-                      <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
+                  <div key={tx.id} style={{ padding: '10px 0', borderBottom: i < reportData.length - 1 ? '1px solid ' + c.border : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 500, fontSize: '14px' }}>{tx.category}</div>
+                        <div style={{ fontSize: '11px', color: c.sec }}>{tx.description || ''} · {tx.date}{tx.card ? ' · ***' + tx.card : ''}</div>
+                      </div>
+                      <div style={{ color: tx.type === 'income' ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap', fontSize: '14px' }}>
+                        {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
+                      </div>
                     </div>
-                    <div style={{ color: tx.type === 'income' ? c.incomeColor : c.expenseColor, fontWeight: 600, whiteSpace: 'nowrap', fontSize: '14px' }}>
-                      {tx.type === 'income' ? '+' : '−'}{tx.amount.toLocaleString()} {tx.currency}
-                    </div>
+                    <button
+                      onClick={() => toggleDetails(tx.id)}
+                      aria-expanded={openDetails.includes(tx.id)}
+                      style={{ marginTop: '5px', fontSize: '11px', background: 'none', border: 'none', color: c.sec, cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                    >
+                      {openDetails.includes(tx.id) ? '▲ ' + t.detailsHide : '▼ ' + t.detailsShow}
+                    </button>
+                    {openDetails.includes(tx.id) && (
+                      <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: c.bg, border: '1px solid ' + c.border, borderRadius: '8px', fontSize: '11px', lineHeight: 1.6 }}>
+                        {txDetailRows(tx).map(row => (
+                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                            <span style={{ color: c.sec, flexShrink: 0 }}>{row.label}</span>
+                            <span style={{ textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
+                          </div>
+                        ))}
+                        <button onClick={() => toggleDetails(tx.id)} style={{ marginTop: '8px', width: '100%', padding: '6px', fontSize: '11px', borderRadius: '6px', border: '1px solid ' + c.border, background: 'none', color: c.sec, cursor: 'pointer' }}>{t.detailsHide}</button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
